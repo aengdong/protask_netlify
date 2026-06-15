@@ -21,6 +21,8 @@ A local-first, installable (PWA) alternative to Akiflow / Todoist that runs on _
 
 > [!IMPORTANT]
 > **Protask is a single-instance app.** By default it has **no login** — one Supabase instance = one user (or a small, trusted group sharing the same data). It is **not** multi-tenant. Run your own instance; don't point untrusted users at a shared one. To safely use your public URL from any device, enable **[Private mode](#-private-mode-lock-to-your-account)** (Google sign-in + Row-Level Security). Full multi-user auth is on the [roadmap](#roadmap).
+>
+> **Using someone else's deployment?** You can't — deploying gives *you* your own private instance backed by *your* Supabase. To use Protask, **fork/clone and run your own** (see [Quick start](#-quick-start-self-host)); your data is never shared with, and never sees, another instance.
 
 ## ✨ Features
 
@@ -64,7 +66,9 @@ supabase/migrations/0003_gtd.sql
 supabase/migrations/0004_workspace_color.sql
 ```
 
-Put the project's **URL** and **anon key** (Supabase → Settings → API) into `.env`, then create your first workspace in the sidebar.
+> `0005_rls.sql` is **optional** — run it only if you want [Private mode](#-private-mode-lock-to-your-account) (locks the instance to your signed-in account).
+
+Put the project's **URL** and **anon key** (Supabase → Settings → API) into `.env`, then create your first workspace in the sidebar. The instance starts empty — it's yours alone.
 
 ## ☁️ Deploy (Vercel)
 
