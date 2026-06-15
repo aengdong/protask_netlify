@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trash2, X, Repeat } from 'lucide-react'
+import { Trash2, X, Repeat, Star } from 'lucide-react'
 import { useStore, kanbanColOf, kanbanPatch } from '../store/store'
 import { KANBAN_LABEL, KANBAN_ORDER, type KanbanCol, type Recurrence } from '../types'
 import { todayStr, toStr } from '../lib/dates'
@@ -65,6 +65,13 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
         <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
           <span className="text-[12px] font-semibold text-zinc-400">태스크</span>
           <div className="ml-auto flex items-center gap-1">
+            <button
+              className={`rounded p-1.5 ${task.important ? 'text-amber-500' : 'text-zinc-400 hover:bg-zinc-100 hover:text-amber-500 dark:hover:bg-zinc-800'}`}
+              title={task.important ? '중요 해제' : '중요 표시'}
+              onClick={() => updateTask(task.id, { important: !task.important })}
+            >
+              <Star size={15} className={task.important ? 'fill-current' : ''} />
+            </button>
             <button
               className="rounded p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
               title="삭제"

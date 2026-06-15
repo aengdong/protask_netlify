@@ -278,6 +278,7 @@ export const useStore = create<Store>((set, get) => ({
       notes: t.notes ?? '',
       status: t.status ?? 'todo',
       someday: t.someday ?? false,
+      important: t.important ?? false,
       position: maxPos(siblings) + GAP,
       scheduled_date: t.scheduled_date ?? null,
       deadline: t.deadline ?? null,

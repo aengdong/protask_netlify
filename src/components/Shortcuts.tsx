@@ -20,6 +20,7 @@ export const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: '← / Esc', desc: '선택 해제 (뷰 이동으로)' },
   { keys: '→ / ←', desc: '선택 태스크: 퀵액션 포커스 이동 · Enter 적용' },
   { keys: '1~6', desc: '선택 태스크: Inbox·Today·Scheduled·Someday·Project·Deadline' },
+  { keys: '0', desc: '선택 태스크: 중요 표시 토글' },
   { keys: 'T', desc: '선택 태스크: 오늘(Today)' },
   { keys: 'S', desc: '선택 태스크: 실행일 날짜 선택(Schedule)' },
   { keys: 'Y', desc: '선택 태스크: Someday(언젠가)' },
@@ -275,6 +276,7 @@ export default function Shortcuts() {
       if (k === 'p') { e.preventDefault(); store.openDetail(hover!); return }
       if (k === 'd') { e.preventDefault(); openPicker('deadline'); return }
       if (k === 'i') { e.preventDefault(); store.updateTask(hover!, { scheduled_date: null, someday: false }); return }
+      if (e.key === '0') { e.preventDefault(); const cur = store.tasks.find(x => x.id === hover); store.updateTask(hover!, { important: !cur?.important }); return }
       if (e.key === '?') { e.preventDefault(); setHelp(h => !h) }
     }
     window.addEventListener('keydown', onKey)

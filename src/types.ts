@@ -88,6 +88,8 @@ export interface Task {
   status: TaskStatus
   /** Someday(언젠가) — 날짜 없이 의도적으로 미뤄둔 태스크. 칸반 백로그와 동일 */
   someday: boolean
+  /** 중요 표시 — 우선순위 상/중/하 대신 중요/보통만 구분, 중요는 강조 표시 */
+  important: boolean
   position: number
   scheduled_date: string | null
   deadline: string | null

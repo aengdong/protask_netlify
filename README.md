@@ -64,6 +64,7 @@ supabase/migrations/0001_init.sql
 supabase/migrations/0002_custom_sections.sql
 supabase/migrations/0003_gtd.sql
 supabase/migrations/0004_workspace_color.sql
+supabase/migrations/0006_task_important.sql
 ```
 
 > `0005_rls.sql` is **optional** — run it only if you want [Private mode](#-private-mode-lock-to-your-account) (locks the instance to your signed-in account).

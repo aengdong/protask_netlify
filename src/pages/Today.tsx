@@ -6,16 +6,16 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  AlarmClockOff, CalendarX2, RefreshCw, CalendarDays, Columns3, Rows3,
-  Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2,
+  CalendarX2, RefreshCw, CalendarDays, Columns3, Rows3,
+  Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2, Star,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, selToday, selOverdue, useNavOrder } from '../store/store'
 import { useGcal } from '../store/gcalStore'
-import type { Task } from '../types'
+import { wsColor, type Task } from '../types'
 import { between } from '../lib/position'
 import { countCk } from '../lib/group'
-import { fmtDate, todayStr, toStr } from '../lib/dates'
+import { fmtDate, todayStr, toStr, daysFromToday } from '../lib/dates'
 import { addDays } from 'date-fns'
 import TaskRow, { DeadlineBadge } from '../components/TaskRow'
 import ProjectChip from '../components/ProjectChip'
@@ -31,11 +31,16 @@ export default function TodayPage() {
   const addSection = useStore(s => s.addSection)
   const addTask = useStore(s => s.addTask)
   const allTasks = useStore(s => s.tasks)
+  const workspaces = useStore(s => s.workspaces)
+  const projects = useStore(s => s.projects)
   const openDetail = useStore(s => s.openDetail)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [view, setView] = useState<'list' | 'board'>(() => (localStorage.getItem('pd-todayview') as 'list' | 'board') || 'list')
   const setViewP = (v: 'list' | 'board') => { setView(v); localStorage.setItem('pd-todayview', v) }
+  type GroupBy = 'section' | 'wsproject' | 'importance'
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem('pd-todaygroup') as GroupBy) || 'section')
+  const setGroupByP = (g: GroupBy) => { setGroupBy(g); localStorage.setItem('pd-todaygroup', g) }
 
   const submit = () => {
     const v = text.trim()
@@ -65,14 +70,33 @@ export default function TodayPage() {
     return map
   }, [todayTasks, keys, secIds])
 
-  // 키보드 내비 순서: 지연 → To-dos(미지정+섹션, 미완료) → Done
+  const todoTasks = useMemo(() => todayTasks.filter(t => t.status !== 'done'), [todayTasks])
+  // 워크스페이스 ▸ 프로젝트 그룹 (groupBy='wsproject')
+  const wsGroups = useMemo(() => {
+    const noWs = todoTasks.filter(t => !t.workspace_id)
+    const byWs = new Map<string, Task[]>()
+    for (const t of todoTasks) { if (!t.workspace_id) continue; if (!byWs.has(t.workspace_id)) byWs.set(t.workspace_id, []); byWs.get(t.workspace_id)!.push(t) }
+    const groups = workspaces.filter(w => byWs.has(w.id)).map(w => {
+      const wt = byWs.get(w.id)!
+      const wp = projects.filter(p => p.workspace_id === w.id).sort((a, b) => a.position - b.position)
+      const subs = wp.map(p => ({ project: p, tasks: wt.filter(t => t.project_id === p.id) })).filter(s => s.tasks.length)
+      const noProj = wt.filter(t => !t.project_id || !wp.some(p => p.id === t.project_id))
+      return { ws: w, subs, noProj, total: wt.length }
+    })
+    return { noWs, groups }
+  }, [todoTasks, workspaces, projects])
+  const importantTodo = useMemo(() => todoTasks.filter(t => t.important), [todoTasks])
+  const normalTodo = useMemo(() => todoTasks.filter(t => !t.important), [todoTasks])
+
+  // 키보드 내비 순서: 지연 → To-dos(그룹 순서) → Done
+  const todoOrder = useMemo(() => {
+    if (groupBy === 'wsproject') return [...wsGroups.noWs, ...wsGroups.groups.flatMap(g => [...g.subs.flatMap(s => s.tasks), ...g.noProj])].map(t => t.id)
+    if (groupBy === 'importance') return [...importantTodo, ...normalTodo].map(t => t.id)
+    return keys.flatMap(k => (bySec[k] ?? []).filter(t => t.status !== 'done').map(t => t.id))
+  }, [groupBy, wsGroups, importantTodo, normalTodo, keys, bySec])
   useNavOrder(useMemo(
-    () => [
-      ...overdue.map(t => t.id),
-      ...keys.flatMap(k => (bySec[k] ?? []).filter(t => t.status !== 'done').map(t => t.id)),
-      ...todayTasks.filter(t => t.status === 'done').map(t => t.id),
-    ],
-    [overdue, keys, bySec, todayTasks],
+    () => [...overdue.map(t => t.id), ...todoOrder, ...todayTasks.filter(t => t.status === 'done').map(t => t.id)],
+    [overdue, todoOrder, todayTasks],
   ))
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
@@ -132,7 +156,20 @@ export default function TodayPage() {
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-[18px] font-bold tracking-tight">Today</h1>
         <span className="text-[12.5px] font-medium text-zinc-400">{fmtDate(todayStr())} · {doneCount}/{todayTasks.length} 완료</span>
-        <div className="ml-auto flex items-center rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700">
+
+        {/* 보기 각도 (리스트일 때): 섹션 / 워크·프로젝트 / 중요도 */}
+        {view === 'list' && (
+          <div className="ml-auto flex items-center rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700">
+            {([['section', '섹션'], ['wsproject', '워크·프로젝트'], ['importance', '중요도']] as const).map(([g, label]) => (
+              <button key={g}
+                className={`rounded px-2 py-0.5 text-[12px] font-semibold ${groupBy === g ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+                onClick={() => setGroupByP(g)}
+              >{label}</button>
+            ))}
+          </div>
+        )}
+
+        <div className={`flex items-center rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700 ${view === 'list' ? '' : 'ml-auto'}`}>
           <button
             className={`flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-semibold ${view === 'list' ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
             onClick={() => setViewP('list')} title="리스트"
@@ -142,15 +179,17 @@ export default function TodayPage() {
             onClick={() => setViewP('board')} title="섹션 보드"
           ><Columns3 size={13} /> 보드</button>
         </div>
-        <button
-          className="btn !py-1 !text-[11.5px]"
-          onClick={() => {
-            const name = window.prompt('새 섹션 이름 (예: 아침, 오전, 집중시간)')
-            if (name?.trim()) addSection(name.trim())
-          }}
-        >
-          <Plus size={13} /> 섹션
-        </button>
+        {view === 'board' || groupBy === 'section' ? (
+          <button
+            className="btn !py-1 !text-[11.5px]"
+            onClick={() => {
+              const name = window.prompt('새 섹션 이름 (예: 아침, 오전, 집중시간)')
+              if (name?.trim()) addSection(name.trim())
+            }}
+          >
+            <Plus size={13} /> 섹션
+          </button>
+        ) : null}
       </div>
 
       <div className="mb-4 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900">
@@ -168,29 +207,22 @@ export default function TodayPage() {
       {/* 1) 오늘 일정 (구글캘린더) — 최상단 */}
       <TodayEvents />
 
-      {/* 2) 지연 */}
+      {/* 2) Overdue — 경과 일수만 우측에 d+N */}
       {overdue.length > 0 && (
-        <section className="mb-4 rounded-lg border border-red-200 bg-red-50/60 p-2.5 dark:border-red-900 dark:bg-red-950/30">
-          <div className="mb-1 flex items-center gap-2 px-1.5">
-            <AlarmClockOff size={14} className="text-red-500" />
-            <span className="text-[12.5px] font-bold text-red-600 dark:text-red-400">지연 {overdue.length}</span>
+        <section className="mb-2">
+          <div className="mt-1 mb-1.5 flex items-baseline gap-2 px-1.5">
+            <span className="text-[13px] font-bold tracking-tight">Overdue</span>
+            <span className="text-[11.5px] font-semibold text-zinc-400">{overdue.length}</span>
             <button
-              className="ml-auto rounded px-1.5 py-0.5 text-[11.5px] font-semibold text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/50"
+              className="ml-auto rounded px-1.5 py-0.5 text-[11px] font-semibold text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400"
               onClick={() => overdue.forEach(t => updateTask(t.id, { scheduled_date: todayStr() }))}
             >
-              모두 오늘로 이동
+              모두 오늘로
             </button>
           </div>
           {overdue.map(t => (
-            <TaskRow key={t.id} task={t} onOpen={openDetail} showDate
-              trailing={
-                <button
-                  className="invisible shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-blue-600 group-hover:visible hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
-                  onClick={e => { e.stopPropagation(); updateTask(t.id, { scheduled_date: todayStr() }) }}
-                >
-                  오늘로
-                </button>
-              }
+            <TaskRow key={t.id} task={t} onOpen={openDetail}
+              trailing={<span className="shrink-0 text-[11px] font-semibold text-amber-600 dark:text-amber-400">d+{-daysFromToday(t.scheduled_date!)}</span>}
             />
           ))}
         </section>
@@ -217,15 +249,71 @@ export default function TodayPage() {
         ) : (
           <>
             <GroupLabel label="To-dos" count={todoCount} />
-            {/* 미지정(섹션 없음) — 헤더 없이 맨 위 */}
-            <Section secKey={NONE} name="" tasks={(bySec[NONE] ?? []).filter(t => t.status !== 'done')}
-              onOpen={openDetail} isFirst isLast hideHeader />
-            {/* 커스텀 섹션 */}
-            {sorted.map((s, i) => (
-              <Section key={s.id} secKey={s.id} name={s.name}
-                tasks={(bySec[s.id] ?? []).filter(t => t.status !== 'done')}
-                onOpen={openDetail} isFirst={i === 0} isLast={i === sorted.length - 1} />
-            ))}
+
+            {/* 각도 1: 섹션 (드래그로 배정) */}
+            {groupBy === 'section' && (
+              <>
+                <Section secKey={NONE} name="" tasks={(bySec[NONE] ?? []).filter(t => t.status !== 'done')}
+                  onOpen={openDetail} isFirst isLast hideHeader />
+                {sorted.map((s, i) => (
+                  <Section key={s.id} secKey={s.id} name={s.name}
+                    tasks={(bySec[s.id] ?? []).filter(t => t.status !== 'done')}
+                    onOpen={openDetail} isFirst={i === 0} isLast={i === sorted.length - 1} />
+                ))}
+              </>
+            )}
+
+            {/* 각도 2: 워크스페이스 ▸ 프로젝트 */}
+            {groupBy === 'wsproject' && (
+              <div className="mb-2">
+                {wsGroups.noWs.length > 0 && (
+                  <div className="mb-2">
+                    {wsGroups.groups.length > 0 && <SubLabel label="미분류" muted />}
+                    {wsGroups.noWs.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+                  </div>
+                )}
+                {wsGroups.groups.map(({ ws, subs, noProj }) => (
+                  <div key={ws.id} className="mb-3">
+                    <div className="mb-0.5 flex items-baseline gap-1.5 px-1.5">
+                      <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: wsColor(ws.id, workspaces) }} />
+                      <span className="text-[12px] font-bold">{ws.name}</span>
+                    </div>
+                    {subs.map(s => (
+                      <div key={s.project.id} className="mb-1">
+                        <SubLabel label={s.project.title} />
+                        {s.tasks.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+                      </div>
+                    ))}
+                    {noProj.length > 0 && (
+                      <div className="mb-1">
+                        {subs.length > 0 && <SubLabel label="프로젝트 없음" muted />}
+                        {noProj.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 각도 3: 중요도 */}
+            {groupBy === 'importance' && (
+              <div className="mb-2">
+                <div className="mb-0.5 flex items-baseline gap-1.5 px-1.5">
+                  <Star size={12} className="self-center fill-amber-400 text-amber-400" />
+                  <span className="text-[12px] font-bold text-amber-600 dark:text-amber-400">중요</span>
+                  <span className="text-[11px] font-semibold text-zinc-400">{importantTodo.length}</span>
+                </div>
+                {importantTodo.length
+                  ? importantTodo.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)
+                  : <p className="px-2 py-1 text-[12px] text-zinc-400">중요 표시한 태스크가 없습니다</p>}
+                <div className="mt-3 mb-0.5 flex items-baseline gap-1.5 px-1.5">
+                  <span className="text-[12px] font-bold text-zinc-500 dark:text-zinc-300">그 외</span>
+                  <span className="text-[11px] font-semibold text-zinc-400">{normalTodo.length}</span>
+                </div>
+                {normalTodo.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+              </div>
+            )}
+
             {doneToday.length > 0 && (
               <section className="mt-5">
                 <GroupLabel label="Done" count={doneCount} />
@@ -317,6 +405,15 @@ function TodayEvents() {
           )
       )}
     </section>
+  )
+}
+
+/** 워크스페이스 아래 프로젝트 소제목 (들여쓰기) */
+function SubLabel({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <div className="mt-0.5 mb-0.5 pl-4">
+      <span className={`text-[11.5px] font-semibold ${muted ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-300'}`}>{label}</span>
+    </div>
   )
 }
 

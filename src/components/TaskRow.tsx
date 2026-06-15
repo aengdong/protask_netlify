@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, CheckCircle2, CalendarDays, FolderInput, CloudMoon, Sun, Flag, Inbox } from 'lucide-react'
+import { Circle, CheckCircle2, CalendarDays, FolderInput, CloudMoon, Sun, Flag, Inbox, Star } from 'lucide-react'
 import { addDays } from 'date-fns'
-import type { Task } from '../types'
+import type { Task, ChecklistItem } from '../types'
 import { useStore } from '../store/store'
 import ProjectChip from './ProjectChip'
 import { daysFromToday, fmtDateShort, todayStr, toStr } from '../lib/dates'
@@ -19,6 +19,7 @@ export default function TaskRow({
   trailing?: React.ReactNode
 }) {
   const toggleDone = useStore(s => s.toggleDone)
+  const updateTask = useStore(s => s.updateTask)
   const selected = useStore(s => s.hoverTaskId === task.id)
   const done = task.status === 'done'
   const ref = useRef<HTMLDivElement>(null)
@@ -32,41 +33,85 @@ export default function TaskRow({
   const ckDone = countCk(task.checklist, true)
 
   return (
-    <div
-      ref={ref}
-      className={`group flex min-h-[36px] cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 ${
-        selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
-      }`}
-      onClick={() => onOpen(task.id)}
-    >
-      <button
-        className={`shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
-        onClick={e => {
-          e.stopPropagation()
-          toggleDone(task.id)
-        }}
-        title={done ? '완료 취소 (Space)' : '완료 (Space)'}
+    <div>
+      <div
+        ref={ref}
+        className={`group flex min-h-[36px] cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 ${
+          selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
+        }`}
+        onClick={() => onOpen(task.id)}
       >
-        {done ? <CheckCircle2 size={17} /> : <Circle size={17} />}
-      </button>
+        {/* 중요 토글 — 중요면 항상 노란 별, 아니면 hover/선택 시 토글 가능 */}
+        <button
+          className={`shrink-0 ${task.important ? 'text-amber-500' : 'invisible text-zinc-300 hover:text-amber-500 group-hover:visible dark:text-zinc-600'}`}
+          onClick={e => { e.stopPropagation(); updateTask(task.id, { important: !task.important }) }}
+          title={task.important ? '중요 해제' : '중요 표시'}
+        >
+          <Star size={14} className={task.important ? 'fill-current' : ''} />
+        </button>
 
-      <span className={`min-w-0 flex-1 truncate text-[13.5px] ${done ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>
-        {task.title}
-        {ckTotal > 0 && (
-          <span className="ml-1.5 text-[11px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>
+        <button
+          className={`shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
+          onClick={e => {
+            e.stopPropagation()
+            toggleDone(task.id)
+          }}
+          title={done ? '완료 취소 (Space)' : '완료 (Space)'}
+        >
+          {done ? <CheckCircle2 size={17} /> : <Circle size={17} />}
+        </button>
+
+        <span className={`min-w-0 flex-1 truncate text-[13.5px] ${done ? 'text-zinc-400 line-through dark:text-zinc-500' : task.important ? 'font-semibold' : ''}`}>
+          {task.title}
+          {ckTotal > 0 && (
+            <span className="ml-1.5 text-[11px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>
+          )}
+        </span>
+
+        <QuickBar task={task} selected={selected} />
+
+        {showDate && task.scheduled_date && (
+          <span className="shrink-0 text-[11.5px] font-medium text-zinc-400">{fmtDateShort(task.scheduled_date)}</span>
         )}
-      </span>
+        {task.deadline && !done && <DeadlineBadge deadline={task.deadline} />}
+        <ProjectChip projectId={task.project_id} workspaceId={task.workspace_id} />
+        {trailing}
+      </div>
 
-      <QuickBar task={task} selected={selected} />
-
-      {showDate && task.scheduled_date && (
-        <span className="shrink-0 text-[11.5px] font-medium text-zinc-400">{fmtDateShort(task.scheduled_date)}</span>
+      {task.checklist.length > 0 && (
+        <Subtasks items={task.checklist} onChange={next => updateTask(task.id, { checklist: next })} />
       )}
-      {task.deadline && !done && <DeadlineBadge deadline={task.deadline} />}
-      <ProjectChip projectId={task.project_id} workspaceId={task.workspace_id} />
-      {trailing}
     </div>
   )
+}
+
+/* 서브태스크(체크리스트) — 태스크 밑에 들여써서 표시 + 체크 토글 */
+function toggleCk(items: ChecklistItem[], id: string): ChecklistItem[] {
+  return items.map(c => ({ ...c, done: c.id === id ? !c.done : c.done, children: toggleCk(c.children, id) }))
+}
+function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next: ChecklistItem[]) => void }) {
+  const render = (list: ChecklistItem[], depth: number): React.ReactNode =>
+    list.map(c => (
+      <div key={c.id}>
+        <div
+          className="flex items-start gap-1.5 py-[1px]"
+          style={{ paddingLeft: 46 + depth * 16 }}
+          onClick={e => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={c.done}
+            onChange={() => onChange(toggleCk(items, c.id))}
+            className="mt-[3px] h-3 w-3 shrink-0 cursor-pointer accent-emerald-500"
+          />
+          <span className={`text-[12px] leading-[1.45] ${c.done ? 'text-zinc-400 line-through dark:text-zinc-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+            {c.title}
+          </span>
+        </div>
+        {render(c.children, depth + 1)}
+      </div>
+    ))
+  return <div className="mb-1">{render(items, 0)}</div>
 }
 
 /** hover/키보드 선택 시 나타나는 즉시 편집 바: 오늘/내일 + 날짜·프로젝트 팝오버 */
