@@ -264,8 +264,10 @@ export default function CalendarPage() {
             </div>
           ) : activeEvent ? (
             <div
-              className="rounded-r-sm bg-white px-2 py-1 text-[11.5px] font-medium text-zinc-600 shadow-lg dark:bg-zinc-800 dark:text-zinc-300"
-              style={{ borderLeft: `3px solid ${activeEvent.color ?? '#3b82f6'}` }}
+              className={`px-2 py-1 text-[11.5px] font-medium shadow-lg ${
+                activeEvent.allDay ? 'rounded-sm text-white' : 'rounded-r-sm bg-white text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+              }`}
+              style={activeEvent.allDay ? { background: activeEvent.color ?? '#3b82f6' } : { borderLeft: `3px solid ${activeEvent.color ?? '#3b82f6'}` }}
             >
               {activeEvent.summary}
             </div>
@@ -365,14 +367,18 @@ function CalChip({ task, color, onOpen }: { task: Task; color: string; onOpen: (
 /* 구글캘린더 일정 칩 — 클릭=편집, 드래그=날짜 이동(구글에 반영) */
 function EventChip({ ev, onOpen }: { ev: GcalEvent; onOpen: (ev: GcalEvent) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `gcal:${ev.id}` })
+  const color = ev.color ?? '#3b82f6'
+  // 종일=배경 전체 색칠(구글캘린더 스타일), 시간 일정=좌측 보더 + 시각
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={() => onOpen(ev)}
-      className={`flex cursor-pointer items-center gap-1 truncate rounded-r-sm px-1 py-0.5 text-[11.5px] font-medium text-zinc-500 dark:text-zinc-400 ${isDragging ? 'opacity-40' : ''}`}
-      style={{ borderLeft: `3px solid ${ev.color ?? '#3b82f6'}`, background: 'rgb(0 0 0 / 0.03)' }}
+      className={`flex cursor-pointer items-center gap-1 truncate px-1 py-0.5 text-[11.5px] font-medium ${
+        ev.allDay ? 'rounded-sm text-white' : 'rounded-r-sm text-zinc-500 dark:text-zinc-400'
+      } ${isDragging ? 'opacity-40' : ''}`}
+      style={ev.allDay ? { background: color } : { borderLeft: `3px solid ${color}`, background: 'rgb(0 0 0 / 0.03)' }}
       title={`${ev.summary}${ev.allDay ? ' (종일)' : ` ${ev.start.slice(11, 16)}`} · ${ev.calendar ?? ''} — 클릭 편집 / 드래그 이동`}
     >
       {!ev.allDay && <span className="shrink-0 text-[10px] text-zinc-400">{ev.start.slice(11, 16)}</span>}

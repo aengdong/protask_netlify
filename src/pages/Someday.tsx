@@ -15,6 +15,7 @@ import TaskRow from '../components/TaskRow'
 export default function SomedayPage() {
   const someday = useStore(useShallow(selSomeday))
   const workspaces = useStore(s => s.workspaces)
+  const projects = useStore(s => s.projects)
   const sections = useStore(s => s.sections)
   const addTask = useStore(s => s.addTask)
   const updateTask = useStore(s => s.updateTask)
@@ -34,7 +35,7 @@ export default function SomedayPage() {
     setText('')
   }
 
-  // 워크스페이스 단위 그룹 (프로젝트는 행 태그). 미분류 먼저.
+  // 워크스페이스 ▸ 프로젝트 2단 그룹. 워크스페이스 없는 항목은 맨 위.
   const { noWs, groups } = useMemo(() => {
     const noWs = someday.filter(t => !t.workspace_id)
     const byWs = new Map<string, Task[]>()
@@ -43,11 +44,22 @@ export default function SomedayPage() {
       if (!byWs.has(t.workspace_id)) byWs.set(t.workspace_id, [])
       byWs.get(t.workspace_id)!.push(t)
     }
-    const groups = workspaces.filter(w => byWs.has(w.id)).map(w => ({ ws: w, tasks: byWs.get(w.id)! }))
+    const groups = workspaces.filter(w => byWs.has(w.id)).map(w => {
+      const wsTasks = byWs.get(w.id)!
+      const wsProjects = projects.filter(p => p.workspace_id === w.id).sort((a, b) => a.position - b.position)
+      const subs = wsProjects
+        .map(p => ({ project: p, tasks: wsTasks.filter(t => t.project_id === p.id) }))
+        .filter(s => s.tasks.length)
+      const noProj = wsTasks.filter(t => !t.project_id || !wsProjects.some(p => p.id === t.project_id))
+      return { ws: w, subs, noProj, total: wsTasks.length }
+    })
     return { noWs, groups }
-  }, [someday, workspaces])
+  }, [someday, workspaces, projects])
 
-  useNavOrder(useMemo(() => [...noWs, ...groups.flatMap(g => g.tasks)].map(t => t.id), [noWs, groups]))
+  useNavOrder(useMemo(
+    () => [...noWs, ...groups.flatMap(g => [...g.subs.flatMap(s => s.tasks), ...g.noProj])].map(t => t.id),
+    [noWs, groups],
+  ))
 
   const sortedSections = useMemo(() => [...sections].sort((a, b) => a.position - b.position), [sections])
 
@@ -110,10 +122,21 @@ export default function SomedayPage() {
           </section>
         )}
 
-        {groups.map(({ ws, tasks }) => (
+        {groups.map(({ ws, subs, noProj, total }) => (
           <section key={ws.id} className="mb-4">
-            <GroupHead label={ws.name} color={wsColor(ws.id, workspaces)} count={tasks.length} />
-            {tasks.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
+            <GroupHead label={ws.name} color={wsColor(ws.id, workspaces)} count={total} />
+            {subs.map(s => (
+              <div key={s.project.id} className="mb-1.5">
+                <SubHead label={s.project.title} count={s.tasks.length} />
+                {s.tasks.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
+              </div>
+            ))}
+            {noProj.length > 0 && (
+              <div className="mb-1.5">
+                {subs.length > 0 && <SubHead label="프로젝트 없음" count={noProj.length} muted />}
+                {noProj.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
+              </div>
+            )}
           </section>
         ))}
 
@@ -169,6 +192,16 @@ function GroupHead({ label, color, count }: { label: string; color: string; coun
       <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: color }} />
       <span className="text-[12px] font-bold">{label}</span>
       <span className="text-[11px] font-semibold text-zinc-400">{count}</span>
+    </div>
+  )
+}
+
+/** 워크스페이스 아래 프로젝트 소제목 (들여쓰기) */
+function SubHead({ label, count, muted }: { label: string; count: number; muted?: boolean }) {
+  return (
+    <div className="mt-0.5 mb-0.5 flex items-baseline gap-1.5 pl-4">
+      <span className={`text-[11.5px] font-semibold ${muted ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-300'}`}>{label}</span>
+      <span className="text-[10.5px] font-semibold text-zinc-400">{count}</span>
     </div>
   )
 }

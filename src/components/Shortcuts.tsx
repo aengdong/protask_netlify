@@ -18,6 +18,8 @@ export const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: '↑ / ↓', desc: '할일 입력칸 ↔ 첫 태스크 (↓ 진입 · ↑ 복귀) · Esc 입력 해제' },
   { keys: 'Enter', desc: '뷰에서: 첫 태스크 선택' },
   { keys: '← / Esc', desc: '선택 해제 (뷰 이동으로)' },
+  { keys: '→ / ←', desc: '선택 태스크: 퀵액션 포커스 이동 · Enter 적용' },
+  { keys: '1~6', desc: '선택 태스크: Inbox·Today·Scheduled·Someday·Project·Deadline' },
   { keys: 'T', desc: '선택 태스크: 오늘(Today)' },
   { keys: 'S', desc: '선택 태스크: 실행일 날짜 선택(Schedule)' },
   { keys: 'Y', desc: '선택 태스크: Someday(언젠가)' },
@@ -190,6 +192,31 @@ export default function Shortcuts() {
         // Enter/기타는 아래 공통 처리 (project=이동, task=상세/완료)
       }
 
+      // 선택 태스크 퀵액션 (리스트 뷰): → 다음 · ← 이전(맨앞에서 선택 해제) · 1~6 직접 · Enter 적용
+      if (!store.tabNav && store.navKind === 'task') {
+        const QN = 6 // Inbox · Today · Scheduled · Someday · Project · Deadline
+        const applyQuick = (i: number) => {
+          store.setQuickFocus(-1)
+          if (i === 0) store.updateTask(hover!, { scheduled_date: null, someday: false })
+          else if (i === 1) store.updateTask(hover!, { scheduled_date: todayStr() })
+          else if (i === 2) openPicker('scheduled_date')
+          else if (i === 3) store.updateTask(hover!, { someday: true })
+          else if (i === 4) store.openDetail(hover!)
+          else if (i === 5) openPicker('deadline')
+        }
+        if (e.key === 'ArrowRight') { e.preventDefault(); store.setQuickFocus((store.quickFocus + 1) % QN); return }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          if (store.quickFocus > 0) store.setQuickFocus(store.quickFocus - 1)
+          else if (store.quickFocus === 0) store.setQuickFocus(-1)
+          else store.setHoverTask(null)
+          return
+        }
+        if (e.key === 'Enter' && store.quickFocus >= 0) { e.preventDefault(); applyQuick(store.quickFocus); return }
+        if (e.key === 'Escape' && store.quickFocus >= 0) { e.preventDefault(); store.setQuickFocus(-1); return }
+        if (/^[1-6]$/.test(e.key)) { e.preventDefault(); applyQuick(Number(e.key) - 1); return }
+      }
+
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         const idx = store.navOrder.indexOf(hover!)
@@ -232,8 +259,8 @@ export default function Shortcuts() {
         return
       }
 
-      // 직관 letter 단축키
-      const openPicker = (field: 'scheduled_date' | 'deadline') => {
+      // 직관 letter 단축키 (function 선언 → 위쪽 퀵액션 블록에서도 호출 가능)
+      function openPicker(field: 'scheduled_date' | 'deadline') {
         const t = store.tasks.find(x => x.id === hover)
         pendingDate.current = { id: hover!, field }
         const input = dateRef.current

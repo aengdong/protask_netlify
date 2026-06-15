@@ -6,7 +6,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  AlarmClockOff, CalendarX2, RefreshCw, Clock3, ListTodo, CalendarDays, Columns3, Rows3,
+  AlarmClockOff, CalendarX2, RefreshCw, CalendarDays, Columns3, Rows3,
   Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -65,10 +65,14 @@ export default function TodayPage() {
     return map
   }, [todayTasks, keys, secIds])
 
-  // 키보드 내비 순서: 지연 → 섹션 순서대로
+  // 키보드 내비 순서: 지연 → To-dos(미지정+섹션, 미완료) → Done
   useNavOrder(useMemo(
-    () => [...overdue.map(t => t.id), ...keys.flatMap(k => (bySec[k] ?? []).map(t => t.id))],
-    [overdue, keys, bySec],
+    () => [
+      ...overdue.map(t => t.id),
+      ...keys.flatMap(k => (bySec[k] ?? []).filter(t => t.status !== 'done').map(t => t.id)),
+      ...todayTasks.filter(t => t.status === 'done').map(t => t.id),
+    ],
+    [overdue, keys, bySec, todayTasks],
   ))
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
@@ -117,7 +121,11 @@ export default function TodayPage() {
   }
 
   const activeTask = activeId ? allTasks.find(t => t.id === activeId) : null
-  const doneCount = todayTasks.filter(t => t.status === 'done').length
+  const doneToday = useMemo(() => todayTasks.filter(t => t.status === 'done'), [todayTasks])
+  const doneCount = doneToday.length
+  const todoCount = todayTasks.length - doneCount
+  // 보드: 미지정 컬럼은 항목이 있을 때만
+  const boardKeys = keys.filter(k => k !== NONE || (bySec[NONE]?.length ?? 0) > 0)
 
   return (
     <div className={`mx-auto px-5 py-5 ${view === 'board' ? 'max-w-[1200px]' : 'max-w-[820px]'}`}>
@@ -188,22 +196,44 @@ export default function TodayPage() {
         </section>
       )}
 
-      {/* 3) 섹션 — 리스트(세로) 또는 보드(가로 컬럼) */}
+      {/* 3) To-dos / Done — 리스트(기본) 또는 보드 */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className={view === 'board' ? 'flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 md:snap-none' : ''}>
-          {keys.map((k, i) => (
-            <Section
-              key={k}
-              secKey={k}
-              name={k === NONE ? '미지정' : sorted.find(s => s.id === k)?.name ?? k}
-              tasks={bySec[k] ?? []}
-              onOpen={openDetail}
-              isFirst={i <= 1}
-              isLast={i === keys.length - 1}
-              board={view === 'board'}
-            />
-          ))}
-        </div>
+        {view === 'board' ? (
+          <div className="flex flex-col gap-3 md:flex-row md:snap-x md:snap-mandatory md:overflow-x-auto md:pb-2">
+            {boardKeys.map((k, i) => (
+              <Section
+                key={k}
+                secKey={k}
+                name={k === NONE ? '' : sorted.find(s => s.id === k)?.name ?? k}
+                tasks={bySec[k] ?? []}
+                onOpen={openDetail}
+                isFirst={i === 0}
+                isLast={i === boardKeys.length - 1}
+                board
+                hideHeader={k === NONE}
+              />
+            ))}
+          </div>
+        ) : (
+          <>
+            <GroupLabel label="To-dos" count={todoCount} />
+            {/* 미지정(섹션 없음) — 헤더 없이 맨 위 */}
+            <Section secKey={NONE} name="" tasks={(bySec[NONE] ?? []).filter(t => t.status !== 'done')}
+              onOpen={openDetail} isFirst isLast hideHeader />
+            {/* 커스텀 섹션 */}
+            {sorted.map((s, i) => (
+              <Section key={s.id} secKey={s.id} name={s.name}
+                tasks={(bySec[s.id] ?? []).filter(t => t.status !== 'done')}
+                onOpen={openDetail} isFirst={i === 0} isLast={i === sorted.length - 1} />
+            ))}
+            {doneToday.length > 0 && (
+              <section className="mt-5">
+                <GroupLabel label="Done" count={doneCount} />
+                {doneToday.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+              </section>
+            )}
+          </>
+        )}
         <DragOverlay>
           {activeTask ? (
             <div className="rounded-md border border-blue-300 bg-white px-3 py-2 text-[13px] shadow-lg dark:border-blue-700 dark:bg-zinc-800">
@@ -290,8 +320,18 @@ function TodayEvents() {
   )
 }
 
+/** Overdue / To-dos / Done 상단 구분 라벨 */
+function GroupLabel({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="mt-1 mb-1.5 flex items-baseline gap-2 px-1.5">
+      <span className="text-[13px] font-bold tracking-tight">{label}</span>
+      <span className="text-[11.5px] font-semibold text-zinc-400">{count}</span>
+    </div>
+  )
+}
+
 function Section({
-  secKey, name, tasks, onOpen, isFirst, isLast, board,
+  secKey, name, tasks, onOpen, isFirst, isLast, board, hideHeader,
 }: {
   secKey: string
   name: string
@@ -300,6 +340,7 @@ function Section({
   isFirst: boolean
   isLast: boolean
   board?: boolean
+  hideHeader?: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `sec:${secKey}` })
   const renameSection = useStore(s => s.renameSection)
@@ -312,7 +353,7 @@ function Section({
       ref={setNodeRef}
       className={
         board
-          ? `flex max-h-[70vh] w-[82vw] shrink-0 snap-start flex-col rounded-lg border bg-zinc-100/60 p-1.5 transition-colors md:w-[280px] dark:bg-zinc-900/50 ${
+          ? `flex w-full shrink-0 flex-col rounded-lg border bg-zinc-100/60 p-1.5 transition-colors md:max-h-[70vh] md:w-[280px] md:snap-start dark:bg-zinc-900/50 ${
               isOver ? 'border-blue-400 !bg-blue-50/50 dark:border-blue-600 dark:!bg-blue-950/20' : 'border-zinc-200 dark:border-zinc-800'
             }`
           : `mb-3 rounded-lg border p-1.5 transition-colors ${
@@ -320,28 +361,29 @@ function Section({
             }`
       }
     >
-      <div className="group mb-0.5 flex items-center gap-1.5 px-2 text-zinc-400">
-        {custom ? <Clock3 size={13.5} /> : <ListTodo size={13.5} />}
-        <span className="text-[12px] font-bold tracking-wide">{name}</span>
-        <span className="text-[11px] font-semibold">{tasks.length || ''}</span>
-        {custom && (
-          <span className="invisible flex items-center gap-0.5 group-hover:visible">
-            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="위로" disabled={isFirst}
-              onClick={() => moveSection(secKey, -1)}><ChevronUp size={12.5} /></button>
-            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="아래로" disabled={isLast}
-              onClick={() => moveSection(secKey, 1)}><ChevronDown size={12.5} /></button>
-            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="이름 변경"
-              onClick={() => {
-                const v = window.prompt('섹션 이름', name)
-                if (v?.trim()) renameSection(secKey, v.trim())
-              }}><Pencil size={12} /></button>
-            <button className="rounded p-0.5 hover:text-red-600" title="섹션 삭제 (태스크는 미지정으로)"
-              onClick={() => {
-                if (window.confirm(`섹션 "${name}"을 삭제할까요? 배정된 태스크는 미지정으로 이동합니다.`)) deleteSection(secKey)
-              }}><Trash2 size={12} /></button>
-          </span>
-        )}
-      </div>
+      {!hideHeader && (
+        <div className="group mb-0.5 flex items-center gap-1.5 px-2 text-zinc-400">
+          <span className="text-[12px] font-bold tracking-wide">{name}</span>
+          <span className="text-[11px] font-semibold">{tasks.length || ''}</span>
+          {custom && (
+            <span className="invisible flex items-center gap-0.5 group-hover:visible">
+              <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="위로" disabled={isFirst}
+                onClick={() => moveSection(secKey, -1)}><ChevronUp size={12.5} /></button>
+              <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="아래로" disabled={isLast}
+                onClick={() => moveSection(secKey, 1)}><ChevronDown size={12.5} /></button>
+              <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="이름 변경"
+                onClick={() => {
+                  const v = window.prompt('섹션 이름', name)
+                  if (v?.trim()) renameSection(secKey, v.trim())
+                }}><Pencil size={12} /></button>
+              <button className="rounded p-0.5 hover:text-red-600" title="섹션 삭제 (태스크는 미지정으로)"
+                onClick={() => {
+                  if (window.confirm(`섹션 "${name}"을 삭제할까요? 배정된 태스크는 미지정으로 이동합니다.`)) deleteSection(secKey)
+                }}><Trash2 size={12} /></button>
+            </span>
+          )}
+        </div>
+      )}
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
         <div className={board ? 'flex min-h-[60px] flex-1 flex-col gap-1.5 overflow-y-auto px-0.5' : 'min-h-[8px]'}>
           {tasks.map(t => <SortableRow key={t.id} task={t} onOpen={onOpen} board={board} />)}

@@ -31,6 +31,9 @@ interface Store {
   setNavOrder: (ids: string[], kind?: 'task' | 'project') => void
   /** 방향키 이동 — hoverTaskId를 navOrder 내에서 dir만큼 이동 */
   moveHover: (dir: 1 | -1) => void
+  /** 선택 태스크의 퀵액션 포커스 인덱스(0~5, -1=없음). →/←로 이동, 1~6/Enter로 적용 */
+  quickFocus: number
+  setQuickFocus: (n: number) => void
   /** 현재 화면의 탭 전환기 (←/→ 로 탭 이동). 셸이 등록 */
   tabNav: { keys: string[]; active: string; set: (k: string) => void } | null
   setTabNav: (t: { keys: string[]; active: string; set: (k: string) => void } | null) => void
@@ -107,8 +110,10 @@ export const useStore = create<Store>((set, get) => ({
   hoverTaskId: null,
   navOrder: [],
   navKind: 'task',
-  openDetail: id => set({ detailTaskId: id, hoverTaskId: null }),
-  setHoverTask: id => set({ hoverTaskId: id }),
+  quickFocus: -1,
+  openDetail: id => set({ detailTaskId: id, hoverTaskId: null, quickFocus: -1 }),
+  setHoverTask: id => set({ hoverTaskId: id, quickFocus: -1 }),
+  setQuickFocus: n => set({ quickFocus: n }),
   setNavOrder: (ids, kind = 'task') => set({ navOrder: ids, navKind: kind }),
   tabNav: null,
   setTabNav: t => set({ tabNav: t }),
@@ -121,7 +126,7 @@ export const useStore = create<Store>((set, get) => ({
     let next: number
     if (i === -1) next = dir === 1 ? 0 : navOrder.length - 1
     else next = Math.min(navOrder.length - 1, Math.max(0, i + dir))
-    set({ hoverTaskId: navOrder[next] })
+    set({ hoverTaskId: navOrder[next], quickFocus: -1 })
   },
 
   fetchAll: async () => {

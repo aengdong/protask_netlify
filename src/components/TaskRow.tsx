@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, CheckCircle2, CalendarDays, FolderInput, Moon, Sun, Flag, Inbox } from 'lucide-react'
+import { Circle, CheckCircle2, CalendarDays, FolderInput, CloudMoon, Sun, Flag, Inbox } from 'lucide-react'
 import { addDays } from 'date-fns'
 import type { Task } from '../types'
 import { useStore } from '../store/store'
@@ -74,10 +74,13 @@ function QuickBar({ task, selected }: { task: Task; selected?: boolean }) {
   const updateTask = useStore(s => s.updateTask)
   const projects = useStore(s => s.projects)
   const workspaces = useStore(s => s.workspaces)
+  const qf = useStore(s => (s.hoverTaskId === task.id ? s.quickFocus : -1))
   const [pop, setPop] = useState<null | 'sched' | 'deadline' | 'proj'>(null)
 
   const qbtn = 'rounded px-1.5 py-0.5 text-[11px] font-semibold text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100'
   const on = 'bg-zinc-200 dark:bg-zinc-700'
+  // 키보드 → 로 이동한 퀵액션 포커스 링 (Inbox·Today·Scheduled·Someday·Project·Deadline = 0~5)
+  const foc = (i: number) => (qf === i ? ' ring-2 ring-blue-500 ring-inset bg-zinc-200 dark:bg-zinc-700' : '')
 
   return (
     <span
@@ -85,28 +88,28 @@ function QuickBar({ task, selected }: { task: Task; selected?: boolean }) {
       onClick={e => e.stopPropagation()}
       onMouseLeave={() => setPop(null)}
     >
-      {/* 0) Inbox로 — 날짜·Someday 해제 (I) */}
-      <button className={qbtn} title="Inbox로 — 날짜·Someday 해제 (I)" onClick={() => updateTask(task.id, { scheduled_date: null, someday: false })}>
+      {/* 0) Inbox로 — 날짜·Someday 해제 (1) */}
+      <button className={`${qbtn}${foc(0)}`} title="Inbox로 — 날짜·Someday 해제 (1)" onClick={() => updateTask(task.id, { scheduled_date: null, someday: false })}>
         <Inbox size={13} />
       </button>
-      {/* 1) Today (T) */}
-      <button className={qbtn} title="오늘로 (T)" onClick={() => updateTask(task.id, { scheduled_date: todayStr() })}>
+      {/* 1) Today (2) */}
+      <button className={`${qbtn}${foc(1)}`} title="오늘로 (2)" onClick={() => updateTask(task.id, { scheduled_date: todayStr() })}>
         <Sun size={13} />
       </button>
-      {/* 2) Schedule — 실행일 날짜 (S) */}
-      <button className={`${qbtn} ${pop === 'sched' ? on : ''}`} title="실행일 날짜 선택 (S)" onClick={() => setPop(pop === 'sched' ? null : 'sched')}>
+      {/* 2) Schedule — 실행일 날짜 (3) */}
+      <button className={`${qbtn} ${pop === 'sched' ? on : ''}${foc(2)}`} title="실행일 날짜 선택 (3)" onClick={() => setPop(pop === 'sched' ? null : 'sched')}>
         <CalendarDays size={13} />
       </button>
-      {/* 3) Someday (Y) */}
-      <button className={qbtn} title={task.someday ? 'Someday 해제 (Y)' : 'Someday — 언젠가 (Y)'} onClick={() => updateTask(task.id, { someday: !task.someday })}>
-        <Moon size={13} className={task.someday ? 'fill-current' : ''} />
+      {/* 3) Someday (4) */}
+      <button className={`${qbtn}${foc(3)}`} title={task.someday ? 'Someday 해제 (4)' : 'Someday — 언젠가 (4)'} onClick={() => updateTask(task.id, { someday: !task.someday })}>
+        <CloudMoon size={13} className={task.someday ? 'text-violet-500 dark:text-violet-400' : ''} />
       </button>
-      {/* 4) 프로젝트 선택 (P) */}
-      <button className={`${qbtn} ${pop === 'proj' ? on : ''}`} title="프로젝트 선택 (P)" onClick={() => setPop(pop === 'proj' ? null : 'proj')}>
+      {/* 4) 프로젝트 선택 (5) */}
+      <button className={`${qbtn} ${pop === 'proj' ? on : ''}${foc(4)}`} title="프로젝트 선택 (5)" onClick={() => setPop(pop === 'proj' ? null : 'proj')}>
         <FolderInput size={13} />
       </button>
-      {/* 5) Deadline — 마감일 (D) */}
-      <button className={`${qbtn} ${pop === 'deadline' ? on : ''} ${task.deadline ? 'text-red-500 dark:text-red-400' : ''}`} title="마감일 (D)" onClick={() => setPop(pop === 'deadline' ? null : 'deadline')}>
+      {/* 5) Deadline — 마감일 (6) */}
+      <button className={`${qbtn} ${pop === 'deadline' ? on : ''} ${task.deadline ? 'text-red-500 dark:text-red-400' : ''}${foc(5)}`} title="마감일 (6)" onClick={() => setPop(pop === 'deadline' ? null : 'deadline')}>
         <Flag size={13} />
       </button>
 
