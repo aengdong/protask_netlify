@@ -1,7 +1,8 @@
 /**
- * Google Calendar read-only.
+ * Google Calendar read/write.
  * GIS code client(1회 동의) → Vercel 서버리스(/api/google-token)가 client_secret으로
  * code 교환·refresh — 이후 access token은 제스처 없이 자동 갱신(영구 연결).
+ * 일정 조회 + 생성/수정/삭제(events.insert/patch/delete) 지원.
  */
 
 export const GCAL_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? ''
@@ -12,6 +13,16 @@ export interface GcalCalendar {
   summary: string
   color?: string
   primary?: boolean
+  accessRole?: string // 'owner' | 'writer' | 'reader' | 'freeBusyReader'
+}
+
+/** 일정 생성/수정 입력 (UI 폼 → API 변환은 buildTiming) */
+export interface EventTiming {
+  allDay: boolean
+  startDate: string // YYYY-MM-DD
+  startTime?: string // HH:mm (시간일정일 때)
+  endDate: string
+  endTime?: string
 }
 
 export interface GcalEvent {
@@ -206,6 +217,40 @@ async function gpatch(url: string, body: unknown): Promise<{ ok: true } | GcalFa
   return { ok: true }
 }
 
+/** 401/403/기타 → GcalFail 변환 (gpost/gdelete 공용) */
+async function failFrom(res: Response): Promise<GcalFail> {
+  if (res.status === 401) {
+    if (auth) saveAuth({ ...auth, expiresAt: 0 })
+    return { ok: false, reason: 'auth' }
+  }
+  if (res.status === 403) {
+    const b = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
+    return { ok: false, reason: 'error', detail: b?.error?.message ?? '쓰기 권한 없음(읽기 전용 캘린더이거나 재연결 필요)' }
+  }
+  return { ok: false, reason: 'error', detail: `HTTP ${res.status}` }
+}
+
+/** 공통 POST — 일정 생성. 성공 시 응답 JSON 반환 */
+async function gpost(url: string, body: unknown): Promise<{ ok: true; data: unknown } | GcalFail> {
+  if (!(await ensureToken())) return { ok: false, reason: 'auth' }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${auth!.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return failFrom(res)
+  return { ok: true, data: await res.json() }
+}
+
+/** 공통 DELETE — 일정 삭제 (성공 204) */
+async function gdelete(url: string): Promise<{ ok: true } | GcalFail> {
+  if (!(await ensureToken())) return { ok: false, reason: 'auth' }
+  const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${auth!.token}` } })
+  // 이미 삭제된 경우(410/404)도 성공으로 간주
+  if (res.ok || res.status === 404 || res.status === 410) return { ok: true }
+  return failFrom(res)
+}
+
 /** 'YYYY-MM-DD'에 n일 더한 로컬 날짜 문자열 (정오 기준으로 tz 경계 회피) */
 function addDaysStr(d: string, n: number): string {
   const dt = new Date(`${d}T12:00:00`)
@@ -234,14 +279,65 @@ export async function rescheduleEvent(ev: GcalEvent, newDate: string): Promise<{
   return gpatch(`${API}/calendars/${encodeURIComponent(ev.calendarId)}/events/${encodeURIComponent(ev.id)}`, body)
 }
 
+const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Seoul'
+
+/** 폼 입력 → Google start/end 객체 (종일=date[end 배타], 시간일정=dateTime+timeZone) */
+function buildTiming(t: EventTiming): { start: { date: string } | { dateTime: string; timeZone: string }; end: { date: string } | { dateTime: string; timeZone: string } } {
+  if (t.allDay) {
+    return { start: { date: t.startDate }, end: { date: addDaysStr(t.endDate || t.startDate, 1) } }
+  }
+  const st = t.startTime || '09:00'
+  const et = t.endTime || st
+  return {
+    start: { dateTime: `${t.startDate}T${st}:00`, timeZone: TIME_ZONE },
+    end: { dateTime: `${t.endDate || t.startDate}T${et}:00`, timeZone: TIME_ZONE },
+  }
+}
+
+/** raw 이벤트 → GcalEvent (생성/수정 응답 매핑) */
+function rawToEvent(ev: RawEvent, cal: GcalCalendar): GcalEvent {
+  const start = ev.start.dateTime ?? ev.start.date ?? ''
+  return {
+    id: ev.id,
+    summary: ev.summary ?? '(제목 없음)',
+    start,
+    end: ev.end.dateTime ?? ev.end.date ?? '',
+    date: start.slice(0, 10),
+    allDay: !ev.start.dateTime,
+    color: cal.color,
+    calendarId: cal.id,
+    calendar: cal.summary,
+  }
+}
+
+/** 일정 생성 */
+export async function createEvent(cal: GcalCalendar, summary: string, timing: EventTiming): Promise<{ ok: true; event: GcalEvent } | GcalFail> {
+  const r = await gpost(`${API}/calendars/${encodeURIComponent(cal.id)}/events`, { summary: summary || '(제목 없음)', ...buildTiming(timing) })
+  if (!('data' in r)) return r
+  return { ok: true, event: rawToEvent(r.data as RawEvent, cal) }
+}
+
+/** 일정 수정 (제목·시간·날짜) */
+export async function updateEvent(ev: GcalEvent, patch: { summary?: string; timing?: EventTiming }): Promise<{ ok: true } | GcalFail> {
+  const body: Record<string, unknown> = {}
+  if (patch.summary !== undefined) body.summary = patch.summary || '(제목 없음)'
+  if (patch.timing) Object.assign(body, buildTiming(patch.timing))
+  return gpatch(`${API}/calendars/${encodeURIComponent(ev.calendarId)}/events/${encodeURIComponent(ev.id)}`, body)
+}
+
+/** 일정 삭제 */
+export async function deleteEvent(calendarId: string, eventId: string): Promise<{ ok: true } | GcalFail> {
+  return gdelete(`${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`)
+}
+
 /** 표시 중인 캘린더 목록 */
 export async function fetchCalendars(): Promise<{ ok: true; calendars: GcalCalendar[] } | GcalFail> {
   const r = await gget(`${API}/users/me/calendarList?minAccessRole=reader&maxResults=30`)
   if (!('res' in r)) return r
-  const data = (await r.res.json()) as { items?: { id: string; summary?: string; selected?: boolean; primary?: boolean; backgroundColor?: string }[] }
+  const data = (await r.res.json()) as { items?: { id: string; summary?: string; selected?: boolean; primary?: boolean; backgroundColor?: string; accessRole?: string }[] }
   const calendars = (data.items ?? [])
     .filter(c => c.selected !== false)
-    .map(c => ({ id: c.id, summary: c.summary ?? c.id, color: c.backgroundColor, primary: c.primary }))
+    .map(c => ({ id: c.id, summary: c.summary ?? c.id, color: c.backgroundColor, primary: c.primary, accessRole: c.accessRole }))
   return { ok: true, calendars }
 }
 

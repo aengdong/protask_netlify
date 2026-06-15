@@ -4,7 +4,7 @@ import {
   useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
-import { ChevronDown, ChevronLeft, ChevronRight, Flag, Inbox, Moon, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Flag, Inbox, Moon, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, selInbox, selSomeday } from '../store/store'
 import { useGcal } from '../store/gcalStore'
@@ -12,6 +12,7 @@ import { wsColor, type Task } from '../types'
 import { todayStr, toStr } from '../lib/dates'
 import type { GcalEvent } from '../lib/gcal'
 import ProjectChip from '../components/ProjectChip'
+import GcalEventModal from '../components/GcalEventModal'
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -30,6 +31,9 @@ export default function CalendarPage() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [panelW, setPanelW] = useState(() => { const v = Number(localStorage.getItem('pd-calpanel')); return v >= 220 && v <= 600 ? v : 300 })
   useEffect(() => { localStorage.setItem('pd-calpanel', String(panelW)) }, [panelW])
+  // 구글 일정 생성/편집 모달
+  const [modalEvent, setModalEvent] = useState<GcalEvent | null>(null)
+  const [createDate, setCreateDate] = useState<string | null>(null)
   // 워크스페이스·프로젝트 필터 (''=전체)
   const [fWs, setFWs] = useState('') // ''=전체, '__none'=워크스페이스 없음
   const [fProj, setFProj] = useState('')
@@ -146,6 +150,7 @@ export default function CalendarPage() {
   const activeTask = activeId && !activeId.startsWith('gcal:') ? tasks.find(t => t.id === activeId) : null
   const activeEvent = activeId?.startsWith('gcal:') ? gcal.events.find(x => x.id === activeId.slice(5)) : null
   const today = todayStr()
+  const canCreateEvent = gcal.status === 'connected' && gcal.writableCalendars().length > 0
 
   const title = view === 'week'
     ? `${format(days[0], 'M월 d일')} – ${format(days[days.length - 1], 'M월 d일')}`
@@ -227,6 +232,8 @@ export default function CalendarPage() {
                     events={eventsByDate.get(ds) ?? []}
                     wsColorOf={id => wsColor(id, workspaces)}
                     onOpen={openDetail}
+                    onEventOpen={setModalEvent}
+                    onCreate={canCreateEvent ? setCreateDate : undefined}
                   />
                 )
               })}
@@ -264,12 +271,14 @@ export default function CalendarPage() {
         </DragOverlay>
       </DndContext>
 
+      {modalEvent && <GcalEventModal mode="edit" event={modalEvent} onClose={() => setModalEvent(null)} />}
+      {createDate && <GcalEventModal mode="create" initialDate={createDate} onClose={() => setCreateDate(null)} />}
     </div>
   )
 }
 
 function DayCell({
-  date, dateStr, inMonth, isToday, maxTasks, tasks, deadlines, events, wsColorOf, onOpen,
+  date, dateStr, inMonth, isToday, maxTasks, tasks, deadlines, events, wsColorOf, onOpen, onEventOpen, onCreate,
 }: {
   date: Date
   dateStr: string
@@ -281,25 +290,38 @@ function DayCell({
   events: GcalEvent[]
   wsColorOf: (id: string | null) => string
   onOpen: (id: string) => void
+  onEventOpen: (ev: GcalEvent) => void
+  onCreate?: (date: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateStr}` })
   const day = date.getDay()
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-[96px] flex-col border-r border-b border-zinc-100 p-1 dark:border-zinc-800/70 ${
+      className={`group flex min-h-[96px] flex-col border-r border-b border-zinc-100 p-1 dark:border-zinc-800/70 ${
         !inMonth ? 'bg-zinc-50/60 dark:bg-zinc-900/40' : day === 0 || day === 6 ? 'bg-zinc-50/40 dark:bg-zinc-900/20' : ''
       } ${isOver ? 'bg-blue-50/70 ring-1 ring-blue-400 ring-inset dark:bg-blue-950/30' : ''}`}
     >
-      <div className={`mb-0.5 px-1 text-[11.5px] font-semibold ${
-        isToday
-          ? 'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-blue-600 px-1 text-white'
-          : !inMonth ? 'text-zinc-300 dark:text-zinc-600' : day === 0 ? 'text-red-400' : day === 6 ? 'text-blue-400' : 'text-zinc-500'
-      }`}>
-        {date.getDate()}
+      <div className="mb-0.5 flex items-center gap-1 px-1">
+        <span className={`text-[11.5px] font-semibold ${
+          isToday
+            ? 'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-blue-600 px-1 text-white'
+            : !inMonth ? 'text-zinc-300 dark:text-zinc-600' : day === 0 ? 'text-red-400' : day === 6 ? 'text-blue-400' : 'text-zinc-500'
+        }`}>
+          {date.getDate()}
+        </span>
+        {onCreate && (
+          <button
+            onClick={() => onCreate(dateStr)}
+            className="ml-auto rounded p-0.5 text-zinc-400 opacity-0 transition hover:bg-blue-100 hover:text-blue-600 group-hover:opacity-100 dark:hover:bg-blue-950 dark:hover:text-blue-400"
+            title="이 날짜에 일정 추가"
+          >
+            <Plus size={13} />
+          </button>
+        )}
       </div>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-        {events.map(ev => <EventChip key={'ev' + ev.id} ev={ev} />)}
+        {events.map(ev => <EventChip key={'ev' + ev.id} ev={ev} onOpen={onEventOpen} />)}
         {tasks.slice(0, maxTasks).map(t => <CalChip key={t.id} task={t} color={wsColorOf(t.workspace_id)} onOpen={onOpen} />)}
         {tasks.length > maxTasks && <div className="px-1 text-[11.5px] font-medium text-zinc-400">+{tasks.length - maxTasks}개 더</div>}
         {deadlines.map(t => (
@@ -338,17 +360,18 @@ function CalChip({ task, color, onOpen }: { task: Task; color: string; onOpen: (
   )
 }
 
-/* 구글캘린더 일정 칩 — 드래그로 날짜 이동(구글에 반영) */
-function EventChip({ ev }: { ev: GcalEvent }) {
+/* 구글캘린더 일정 칩 — 클릭=편집, 드래그=날짜 이동(구글에 반영) */
+function EventChip({ ev, onOpen }: { ev: GcalEvent; onOpen: (ev: GcalEvent) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `gcal:${ev.id}` })
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`flex cursor-grab items-center gap-1 truncate rounded-r-sm px-1 py-0.5 text-[11.5px] font-medium text-zinc-500 active:cursor-grabbing dark:text-zinc-400 ${isDragging ? 'opacity-40' : ''}`}
+      onClick={() => onOpen(ev)}
+      className={`flex cursor-pointer items-center gap-1 truncate rounded-r-sm px-1 py-0.5 text-[11.5px] font-medium text-zinc-500 dark:text-zinc-400 ${isDragging ? 'opacity-40' : ''}`}
       style={{ borderLeft: `3px solid ${ev.color ?? '#3b82f6'}`, background: 'rgb(0 0 0 / 0.03)' }}
-      title={`${ev.summary}${ev.allDay ? ' (종일)' : ` ${ev.start.slice(11, 16)}`} · ${ev.calendar ?? ''} — 드래그하여 날짜 이동`}
+      title={`${ev.summary}${ev.allDay ? ' (종일)' : ` ${ev.start.slice(11, 16)}`} · ${ev.calendar ?? ''} — 클릭 편집 / 드래그 이동`}
     >
       {!ev.allDay && <span className="shrink-0 text-[10px] text-zinc-400">{ev.start.slice(11, 16)}</span>}
       <span className="truncate">{ev.summary}</span>

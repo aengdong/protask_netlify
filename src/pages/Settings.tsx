@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Download, CalendarCheck2, Unplug, LogOut } from 'lucide-react'
+import { Download, CalendarCheck2, Unplug, LogOut, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { gcalEnabled } from '../lib/gcal'
 import { useGcal } from '../store/gcalStore'
@@ -74,12 +74,16 @@ export default function SettingsPage() {
           </p>
         ) : gcal.status === 'connected' ? (
           <div>
-            <div className="mb-3 flex items-center gap-3">
+            <div className="mb-1 flex items-center gap-2">
               <p className="text-[12.5px] font-medium text-emerald-600 dark:text-emerald-400">연결됨</p>
+              <button className="btn" onClick={() => void gcal.connect()} title="쓰기 권한 재동의 — 일정 추가·수정·삭제가 안 되면 눌러주세요">
+                <RefreshCw size={13} /> 재연결(쓰기 권한)
+              </button>
               <button className="btn" onClick={() => gcal.disconnect()}>
                 <Unplug size={13} /> 연결 해제
               </button>
             </div>
+            <p className="mb-3 text-[11.5px] text-zinc-400">일정 추가·수정·삭제가 안 되면 “재연결(쓰기 권한)”으로 한 번 재동의하세요.</p>
             <h3 className="mb-1.5 text-[12px] font-bold text-zinc-500 dark:text-zinc-400">표시할 캘린더</h3>
             <div className="space-y-1">
               {gcal.calendars.map(c => (

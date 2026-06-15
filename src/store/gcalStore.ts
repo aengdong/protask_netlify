@@ -1,12 +1,18 @@
 import { create } from 'zustand'
 import {
   connect as gcalConnect, disconnect as gcalDisconnect, fetchCalendars, fetchEventsRange,
-  rescheduleEvent, gcalEnabled, hasValidToken, type GcalCalendar, type GcalEvent,
+  rescheduleEvent, createEvent as gcalCreate, updateEvent as gcalUpdate, deleteEvent as gcalDelete,
+  gcalEnabled, hasValidToken, type GcalCalendar, type GcalEvent, type EventTiming,
 } from '../lib/gcal'
 
 export type GcalStatus = 'disabled' | 'loading' | 'connected' | 'disconnected' | 'api_disabled' | 'error'
 
 const LS_SEL = 'pd-gcal-selected'
+
+/** 하단 토스트(App의 pd:flash 리스너) */
+function flash(msg: string) {
+  try { window.dispatchEvent(new CustomEvent('pd:flash', { detail: msg })) } catch { /* ignore */ }
+}
 
 function loadSelected(): string[] | null {
   try {
@@ -34,6 +40,14 @@ interface GcalStore {
   refresh: () => Promise<void>
   /** 일정을 다른 날짜로 이동(구글에 쓰기). 낙관적 갱신 후 실패 시 롤백 */
   reschedule: (ev: GcalEvent, newDate: string) => Promise<void>
+  /** 쓰기 가능한 캘린더(owner/writer) — 생성 대상 선택지 */
+  writableCalendars: () => GcalCalendar[]
+  /** 일정 생성. 성공 true */
+  createEvent: (cal: GcalCalendar, summary: string, timing: EventTiming) => Promise<boolean>
+  /** 일정 수정(제목·시간·날짜). 성공 true */
+  updateEvent: (ev: GcalEvent, patch: { summary?: string; timing?: EventTiming }) => Promise<boolean>
+  /** 일정 삭제. 성공 true */
+  deleteEvent: (ev: GcalEvent) => Promise<boolean>
   setSelected: (ids: string[] | null) => void
   /** 선택 필터 적용된 특정 날짜 일정 */
   eventsOn: (date: string) => GcalEvent[]
@@ -124,7 +138,59 @@ export const useGcal = create<GcalStore>((set, get) => ({
         status: r.reason === 'auth' ? 'disconnected' : r.reason === 'api_disabled' ? 'api_disabled' : get().status,
         errDetail: r.detail ?? '',
       })
+      flash(r.reason === 'auth' ? '구글 캘린더 연결이 만료됨 — 설정에서 재연결' : '일정 이동 실패 — 설정에서 재연결(쓰기 권한) 후 다시 시도')
     }
+  },
+
+  writableCalendars: () => get().calendars.filter(c => c.accessRole === 'owner' || c.accessRole === 'writer'),
+
+  createEvent: async (cal, summary, timing) => {
+    const r = await gcalCreate(cal, summary, timing)
+    if (!r.ok) {
+      set({ errDetail: r.detail ?? '' })
+      flash(r.reason === 'auth' ? '구글 캘린더 연결 만료 — 설정에서 재연결' : '일정 생성 실패 — 설정에서 재연결(쓰기 권한) 후 다시 시도')
+      return false
+    }
+    set({ events: [...get().events.filter(e => e.id !== r.event.id), r.event] })
+    return true
+  },
+
+  updateEvent: async (ev, patch) => {
+    const prev = get().events
+    const patched: GcalEvent = { ...ev }
+    if (patch.summary !== undefined) patched.summary = patch.summary || '(제목 없음)'
+    if (patch.timing) {
+      const t = patch.timing
+      patched.allDay = t.allDay
+      patched.date = t.startDate
+      if (t.allDay) {
+        patched.start = t.startDate
+        patched.end = t.endDate || t.startDate
+      } else {
+        patched.start = `${t.startDate}T${t.startTime || '09:00'}:00`
+        patched.end = `${t.endDate || t.startDate}T${t.endTime || t.startTime || '09:00'}:00`
+      }
+    }
+    set({ events: prev.map(e => (e.id === ev.id ? patched : e)) })
+    const r = await gcalUpdate(ev, patch)
+    if (!r.ok) {
+      set({ events: prev, errDetail: r.detail ?? '' })
+      flash(r.reason === 'auth' ? '구글 캘린더 연결 만료 — 설정에서 재연결' : '일정 수정 실패 — 권한/재연결 확인')
+      return false
+    }
+    return true
+  },
+
+  deleteEvent: async ev => {
+    const prev = get().events
+    set({ events: prev.filter(e => e.id !== ev.id) })
+    const r = await gcalDelete(ev.calendarId, ev.id)
+    if (!r.ok) {
+      set({ events: prev, errDetail: r.detail ?? '' })
+      flash(r.reason === 'auth' ? '구글 캘린더 연결 만료 — 설정에서 재연결' : '일정 삭제 실패 — 권한/재연결 확인')
+      return false
+    }
+    return true
   },
 
   setSelected: ids => {
