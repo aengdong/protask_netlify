@@ -1,0 +1,279 @@
+import { useMemo, useState } from 'react'
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, closestCorners, pointerWithin,
+  useDroppable, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { useStore, kanbanColOf, kanbanPatch, useNavOrder } from '../../store/store'
+import { KANBAN_DOT, KANBAN_LABEL, type KanbanCol, type Task } from '../../types'
+import { fmtDateShort } from '../../lib/dates'
+import { between } from '../../lib/position'
+import { groupTasks, countCk, type GroupBy, type TaskGroup } from '../../lib/group'
+import type { Phase, Project } from '../../types'
+import { DeadlineBadge } from '../TaskRow'
+
+/** 노션식 테이블 뷰 — 그룹화(상태/라벨/프로젝트/Phase/없음)·접기·인라인 완료/상태·라벨 + 키보드 선택 + 드래그 */
+export default function ProjectTable({
+  tasks, groupBy, onAdd, projects = [], phases = [],
+}: {
+  tasks: Task[]
+  groupBy: GroupBy
+  onAdd: (title: string, group: TaskGroup) => void
+  projects?: Project[]
+  phases?: Phase[]
+}) {
+  const gridCls = 'grid-cols-[24px_1fr_88px_84px_110px]'
+  const openDetail = useStore(s => s.openDetail)
+  const toggleDone = useStore(s => s.toggleDone)
+  const cycleStatus = useStore(s => s.cycleStatus)
+  const updateTask = useStore(s => s.updateTask)
+  const rebalance = useStore(s => s.rebalance)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  )
+
+  // 포인터 위치 우선 충돌감지 — 중첩 스크롤에서 드롭 누락 방지
+  const collision: CollisionDetection = useMemo(() => args => {
+    const p = pointerWithin(args)
+    return p.length ? p : closestCorners(args)
+  }, [])
+
+  // Phase·프로젝트 2단계 중첩: 상위=Phase, 하위=프로젝트
+  const nested = groupBy === 'phase-project'
+  const nestedGroups = useMemo(
+    () => nested ? groupTasks(tasks, 'phase', projects, phases).map(pg => ({ phase: pg, children: groupTasks(pg.tasks, 'project', projects) })) : null,
+    [nested, tasks, projects, phases],
+  )
+  // 드래그/키보드 내비가 쓰는 리프 그룹 (중첩이면 프로젝트 하위 그룹들을 평탄화)
+  const groups = useMemo(
+    () => nested ? (nestedGroups ?? []).flatMap(n => n.children) : groupTasks(tasks, groupBy, projects, phases),
+    [nested, nestedGroups, tasks, groupBy, projects, phases],
+  )
+
+  useNavOrder(useMemo(() => groups.flatMap(g => g.tasks.map(t => t.id)), [groups]), 'task')
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveId(null)
+    const { active, over } = e
+    if (!over) return
+    const id = String(active.id)
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+    const overId = String(over.id)
+
+    let group: TaskGroup | undefined
+    let ids: string[]
+    let insertAt: number
+    if (overId.startsWith('grp:')) {
+      group = groups.find(g => g.key === overId.slice(4))
+      if (!group) return
+      ids = group.tasks.map(t => t.id).filter(x => x !== id)
+      insertAt = ids.length
+    } else {
+      group = groups.find(g => g.tasks.some(t => t.id === overId))
+      if (!group) return
+      const col = group.tasks
+      const origIdx = col.findIndex(t => t.id === id)
+      const overIdx = col.findIndex(t => t.id === overId)
+      ids = col.map(t => t.id).filter(x => x !== id)
+      const overPos = ids.indexOf(overId)
+      insertAt = origIdx !== -1 && origIdx < overIdx ? overPos + 1 : overPos
+    }
+
+    // 그룹 이동 패치: 상태 그룹→kanbanPatch, 라벨 그룹→labels, 프로젝트 그룹→project_id
+    let patch: Partial<Task> = {}
+    if (groupBy === 'status' && group.col && kanbanColOf(task) !== group.col) patch = kanbanPatch(group.col)
+    else if (groupBy === 'label' && group.label_value && !task.labels.includes(group.label_value)) patch = { labels: [group.label_value] }
+    else if ((groupBy === 'project' || groupBy === 'phase-project') && group.project_id !== undefined && task.project_id !== group.project_id) patch = { project_id: group.project_id }
+
+    const sameGroup = Object.keys(patch).length === 0
+    if (sameGroup) {
+      const before = group.tasks.map(t => t.id)
+      const after = [...ids.slice(0, insertAt), id, ...ids.slice(insertAt)]
+      if (before.join() === after.join()) return
+    }
+
+    const prevPos = ids[insertAt - 1] ? tasks.find(t => t.id === ids[insertAt - 1])?.position : undefined
+    const nextPos = ids[insertAt] ? tasks.find(t => t.id === ids[insertAt])?.position : undefined
+    const pos = between(prevPos, nextPos)
+
+    if (Number.isNaN(pos)) {
+      updateTask(id, patch)
+      rebalance([...ids.slice(0, insertAt), id, ...ids.slice(insertAt)], 'position')
+    } else {
+      updateTask(id, { ...patch, position: pos })
+    }
+  }
+
+  const activeTask = activeId ? tasks.find(t => t.id === activeId) : null
+
+  return (
+    <div className="mx-auto max-w-[1000px] px-5 pb-8">
+      <div className={`sticky top-0 z-20 grid ${gridCls} items-center gap-2 border-b border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950`}>
+        <span /><span>제목</span><span>상태</span><span>실행일</span><span>마감일</span>
+      </div>
+
+      <DndContext sensors={sensors} collisionDetection={collision} autoScroll={false} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
+        {nested
+          ? (nestedGroups ?? []).map(n => (
+              <section key={n.phase.key} className="mb-1.5">
+                <button className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-left" onClick={() => setCollapsed(c => ({ ...c, [n.phase.key]: !c[n.phase.key] }))}>
+                  {collapsed[n.phase.key] ? <ChevronRight size={14} className="text-zinc-400" /> : <ChevronDown size={14} className="text-zinc-400" />}
+                  <span className="text-[13px] font-bold">{n.phase.label}</span>
+                  <span className="text-[11px] font-semibold text-zinc-400">{n.phase.tasks.length}</span>
+                </button>
+                {!collapsed[n.phase.key] && (
+                  <div className="ml-[7px] border-l border-zinc-100 pl-3 dark:border-zinc-800">
+                    {n.children.map(child => (
+                      <GroupBlock
+                        key={child.key}
+                        group={child}
+                        groupBy="project"
+                        gridCls={gridCls}
+                        collapsed={!!collapsed[child.key]}
+                        onToggle={() => setCollapsed(c => ({ ...c, [child.key]: !c[child.key] }))}
+                        onOpen={openDetail}
+                        onToggleDone={toggleDone}
+                        onCycle={cycleStatus}
+                        onAdd={title => onAdd(title, child)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))
+          : groups.map(g => (
+              <GroupBlock
+                key={g.key}
+                group={g}
+                groupBy={groupBy}
+                gridCls={gridCls}
+                collapsed={!!collapsed[g.key]}
+                onToggle={() => setCollapsed(c => ({ ...c, [g.key]: !c[g.key] }))}
+                onOpen={openDetail}
+                onToggleDone={toggleDone}
+                onCycle={cycleStatus}
+                onAdd={title => onAdd(title, g)}
+              />
+            ))}
+      </DndContext>
+
+      {groups.every(g => g.tasks.length === 0) && (
+        <div className="mt-6 rounded-lg border border-dashed border-zinc-300 p-10 text-center text-[13px] text-zinc-400 dark:border-zinc-700">
+          태스크가 없습니다 — 아래 그룹의 “+ 태스크”로 추가하세요.
+        </div>
+      )}
+
+      <DragOverlay>{activeTask ? <div className="rounded border border-blue-300 bg-white px-3 py-1.5 text-[12.5px] shadow-lg dark:border-blue-700 dark:bg-zinc-800">{activeTask.title}</div> : null}</DragOverlay>
+    </div>
+  )
+}
+
+function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onToggleDone, onCycle, onAdd }: {
+  group: TaskGroup
+  groupBy: GroupBy
+  gridCls: string
+  collapsed: boolean
+  onToggle: () => void
+  onOpen: (id: string) => void
+  onToggleDone: (id: string) => void
+  onCycle: (id: string) => void
+  onAdd: (title: string) => void
+}) {
+  const [text, setText] = useState('')
+  const showHeader = groupBy !== 'none'
+  const { setNodeRef } = useDroppable({ id: `grp:${group.key}` })
+
+  const submit = () => { const v = text.trim(); if (v) onAdd(v); setText('') }
+
+  return (
+    <section className="mb-1">
+      {showHeader && (
+        <button className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-left" onClick={onToggle}>
+          {collapsed ? <ChevronRight size={13} className="text-zinc-400" /> : <ChevronDown size={13} className="text-zinc-400" />}
+          {group.col && <span className={`h-2 w-2 rounded-full ${KANBAN_DOT[group.col]}`} />}
+          <span className="text-[12.5px] font-bold">{group.label}</span>
+          <span className="text-[11px] font-semibold text-zinc-400">{group.tasks.length}</span>
+        </button>
+      )}
+
+      {!collapsed && (
+        <div ref={setNodeRef}>
+          <SortableContext items={group.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            {group.tasks.map(t => <Row key={t.id} task={t} gridCls={gridCls} onOpen={onOpen} onToggleDone={onToggleDone} onCycle={onCycle} />)}
+          </SortableContext>
+          <div className="grid grid-cols-[24px_1fr] items-center gap-2 px-2 py-1">
+            <Plus size={13} className="text-zinc-300" />
+            <input
+              className="h-7 bg-transparent text-[12.5px] outline-none placeholder:text-zinc-400"
+              placeholder="+ 태스크"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit() }}
+              onBlur={submit}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Row({ task, gridCls, onOpen, onToggleDone, onCycle }: {
+  task: Task
+  gridCls: string
+  onOpen: (id: string) => void
+  onToggleDone: (id: string) => void
+  onCycle: (id: string) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const selected = useStore(s => s.hoverTaskId === task.id)
+  const done = task.status === 'done'
+  const col = kanbanColOf(task)
+  const ckTotal = countCk(task.checklist)
+  const ckDone = countCk(task.checklist, true)
+  return (
+    <div
+      ref={setNodeRef}
+      data-navid={task.id}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+      className={`grid ${gridCls} items-center gap-2 rounded-md border-b border-zinc-100 px-2 py-1.5 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40 ${
+        isDragging ? 'opacity-40' : ''
+      } ${selected ? 'bg-zinc-50 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/40' : ''}`}
+    >
+      <button
+        className={`flex h-4 w-4 items-center justify-center rounded-full border transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-zinc-300 text-transparent hover:border-emerald-500 dark:border-zinc-600'}`}
+        title="완료 토글"
+        onClick={e => { e.stopPropagation(); onToggleDone(task.id) }}
+        onPointerDown={e => e.stopPropagation()}
+      >
+        <Check size={11} strokeWidth={3} />
+      </button>
+
+      <button className="flex min-w-0 items-center gap-2 text-left" onClick={() => onOpen(task.id)}>
+        <span className={`truncate text-[13px] ${done ? 'text-zinc-400 line-through' : ''}`}>{task.title}</span>
+        {ckTotal > 0 && <span className="shrink-0 text-[11px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>}
+        {task.labels.map(l => (
+          <span key={l} className="shrink-0 rounded-full bg-zinc-100 px-1.5 py-px text-[10.5px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{l}</span>
+        ))}
+      </button>
+
+      <button className="flex items-center gap-1.5 text-left" title={`${KANBAN_LABEL[col]} — 클릭하여 다음 단계로`} onClick={e => { e.stopPropagation(); onCycle(task.id) }} onPointerDown={e => e.stopPropagation()}>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${KANBAN_DOT[col as KanbanCol]}`} />
+        <span className="text-[11.5px] text-zinc-500 dark:text-zinc-400">{KANBAN_LABEL[col]}</span>
+      </button>
+
+      <span className="text-[11.5px] text-zinc-500 dark:text-zinc-400">{task.scheduled_date ? fmtDateShort(task.scheduled_date) : ''}</span>
+
+      <span className="flex">{task.deadline && !done ? <DeadlineBadge deadline={task.deadline} /> : task.deadline ? <span className="text-[11px] text-zinc-400">{fmtDateShort(task.deadline)}</span> : null}</span>
+    </div>
+  )
+}

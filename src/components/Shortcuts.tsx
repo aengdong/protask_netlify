@@ -1,0 +1,294 @@
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import Modal from './Modal'
+import { useStore } from '../store/store'
+import { todayStr } from '../lib/dates'
+
+/**
+ * 전역 단축키.
+ *  선택 없음:  ↑/↓ 뷰 이동(Inbox/Today/Scheduled/Someday/Calendar/워크스페이스) · → 할일 입력칸 포커스(없으면 첫 태스크) · Enter 첫 태스크 선택
+ *  할일 입력칸: ↓ 첫 태스크 선택 · ↑(첫 태스크에서) 입력칸 복귀 · Esc 입력 해제 · Enter 작성
+ *  태스크 선택: ↑/↓ 이동 · ←/Esc 해제 · T 오늘 · S 날짜선택 · Y Someday · P 프로젝트 · D 마감일 · I Inbox · Space 완료 · Enter 상세 · Del 삭제
+ *  ←/→ 탭 전환(워크스페이스·프로젝트) · Backspace 뒤로가기
+ *  Alt+1~5 뷰 직접이동 · Alt+Shift+1~9 워크스페이스 · Ctrl+K 캡처 · Ctrl+Z 실행취소 · ? 도움말
+ */
+export const SHORTCUTS: { keys: string; desc: string }[] = [
+  { keys: '↑ / ↓', desc: '선택 없음: 뷰 이동 · 선택 시: 태스크 이동' },
+  { keys: '→', desc: '뷰에서: 할일 입력칸 포커스(Inbox/Today/Someday) · 없으면 첫 태스크' },
+  { keys: '↑ / ↓', desc: '할일 입력칸 ↔ 첫 태스크 (↓ 진입 · ↑ 복귀) · Esc 입력 해제' },
+  { keys: 'Enter', desc: '뷰에서: 첫 태스크 선택' },
+  { keys: '← / Esc', desc: '선택 해제 (뷰 이동으로)' },
+  { keys: 'T', desc: '선택 태스크: 오늘(Today)' },
+  { keys: 'S', desc: '선택 태스크: 실행일 날짜 선택(Schedule)' },
+  { keys: 'Y', desc: '선택 태스크: Someday(언젠가)' },
+  { keys: 'P', desc: '선택 태스크: 프로젝트 선택' },
+  { keys: 'D', desc: '선택 태스크: 마감일(Deadline)' },
+  { keys: 'I', desc: '선택 태스크: Inbox로 (날짜·Someday 해제)' },
+  { keys: 'Space', desc: '선택 태스크: 완료 토글' },
+  { keys: 'Enter', desc: '선택 태스크: 상세 팝업' },
+  { keys: 'Del', desc: '선택 태스크: 삭제 (Ctrl+Z 복원)' },
+  { keys: '← / →', desc: '워크스페이스·프로젝트: 탭 전환 (선택 없을 때)' },
+  { keys: 'Backspace', desc: '뒤로가기' },
+  { keys: 'W / M', desc: '캘린더: 주간 / 월간 전환' },
+  { keys: 'Alt + 1~5', desc: '뷰 직접 이동' },
+  { keys: 'Alt + Shift + 1~9', desc: '워크스페이스 이동' },
+  { keys: 'Ctrl K', desc: '빠른 캡처 (Inbox)' },
+  { keys: 'Ctrl Z', desc: '실행취소' },
+  { keys: 'Tab / Shift Tab', desc: '서브태스크: 들여쓰기 / 내어쓰기' },
+  { keys: '?', desc: '단축키 도움말' },
+]
+
+const VIEW_PATHS = ['/inbox', '/', '/scheduled', '/someday', '/calendar']
+const NAV_BY_DIGIT: Record<string, string> = { '1': '/inbox', '2': '/', '3': '/scheduled', '4': '/someday', '5': '/calendar' }
+
+function isTyping(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
+}
+
+export default function Shortcuts() {
+  const navigate = useNavigate()
+  const [help, setHelp] = useState(false)
+  const dateRef = useRef<HTMLInputElement>(null)
+  const pendingDate = useRef<{ id: string; field: 'scheduled_date' | 'deadline' } | null>(null)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const store = useStore.getState()
+
+      // Ctrl+Z
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !isTyping(e)) {
+        e.preventDefault()
+        const msg = store.undo()
+        window.dispatchEvent(new CustomEvent('pd:flash', { detail: msg ?? '되돌릴 작업이 없습니다' }))
+        return
+      }
+      // Alt+Shift+1~9: 워크스페이스
+      if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && /^Digit[1-9]$/.test(e.code) && !isTyping(e)) {
+        const ws = store.workspaces[Number(e.code.slice(5)) - 1]
+        if (ws) { e.preventDefault(); navigate(`/w/${ws.id}`) }
+        return
+      }
+      // Alt+1~5: 뷰 이동
+      if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && /^Digit[1-5]$/.test(e.code) && !isTyping(e)) {
+        e.preventDefault()
+        navigate(NAV_BY_DIGIT[e.code.slice(5)])
+        return
+      }
+
+      // 할일 입력칸 포커스 상태 처리
+      {
+        const el = e.target as HTMLElement
+        if (el?.matches?.('[data-capture]')) {
+          // ↓ → 첫 태스크 선택 (입력 → 목록 탐색 전환)
+          if (e.key === 'ArrowDown' && store.navOrder.length) {
+            e.preventDefault()
+            el.blur()
+            store.setHoverTask(store.navOrder[0])
+            return
+          }
+          // Esc → 입력칸 선택 해제
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            ;(el as HTMLInputElement).blur()
+            return
+          }
+        }
+      }
+
+      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return
+
+      // Backspace : 뒤로가기 (입력 중은 위에서 이미 제외)
+      if (e.key === 'Backspace') { e.preventDefault(); navigate(-1); return }
+
+      const hover = store.hoverTaskId
+      const hasSel = !!hover && !store.detailTaskId
+      const k = e.key.toLowerCase()
+
+      /* ───── 뷰 이동 모드 (선택 없음) ───── */
+      if (!hasSel && !store.detailTaskId) {
+        // ←/→ : 탭 전환 (셸이 등록한 경우) — 콘텐츠 포커스로 복귀
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && store.tabNav) {
+          e.preventDefault()
+          store.setSidebarFocus(false)
+          const { keys, active, set } = store.tabNav
+          const i = keys.indexOf(active)
+          const ni = e.key === 'ArrowRight' ? Math.min(keys.length - 1, i + 1) : Math.max(0, i - 1)
+          if (ni !== i) set(keys[ni])
+          return
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          // 워크스페이스·프로젝트(탭 있는 화면): 사이드바 대신 오른쪽 화면 항목 선택 (Esc로 사이드바 포커스 시 제외)
+          if (store.tabNav && !store.sidebarFocus) {
+            if (store.navOrder.length) {
+              e.preventDefault()
+              store.setHoverTask(e.key === 'ArrowDown' ? store.navOrder[0] : store.navOrder[store.navOrder.length - 1])
+            }
+            return
+          }
+          e.preventDefault()
+          const paths = [...VIEW_PATHS, ...store.workspaces.map(w => `/w/${w.id}`)]
+          const path = window.location.pathname
+          let cur = paths.indexOf(path)
+          if (cur === -1) cur = paths.findIndex(p => p.startsWith('/w/') && path.startsWith(p))
+          if (cur === -1) cur = path === '/' ? 1 : 0
+          const next = Math.min(paths.length - 1, Math.max(0, cur + (e.key === 'ArrowDown' ? 1 : -1)))
+          if (next !== cur) navigate(paths[next])
+          return
+        }
+        // → : 할일 입력칸으로 포커스 (Inbox/Today/Someday). 입력칸 없으면 첫 태스크 선택
+        if (e.key === 'ArrowRight') {
+          const cap = document.querySelector<HTMLInputElement>('[data-capture]')
+          if (cap) { e.preventDefault(); cap.focus(); return }
+          if (store.navOrder.length) { e.preventDefault(); store.setHoverTask(store.navOrder[0]) }
+          return
+        }
+        // Enter : 첫 태스크 선택 (입력칸 없는 뷰 포함)
+        if (e.key === 'Enter' && store.navOrder.length) {
+          e.preventDefault()
+          store.setHoverTask(store.navOrder[0])
+          return
+        }
+        // Esc : 탭 화면에서 선택 없을 때 → 사이드바 포커스(↑/↓로 Inbox 등 이동)
+        if (e.key === 'Escape' && store.tabNav) {
+          e.preventDefault()
+          store.setSidebarFocus(true)
+          return
+        }
+        if (e.key === '?') { e.preventDefault(); setHelp(h => !h) }
+        return
+      }
+
+      /* ───── 태스크 선택 모드 ───── */
+      // 워크스페이스·프로젝트(탭 화면): ←/→ 가로 이동, ↑/↓ 격자 위아래, Esc 사이드바 포커스
+      if (store.tabNav) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); store.moveHover(1); return }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); store.moveHover(-1); return }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault()
+          const down = e.key === 'ArrowDown'
+          const h = hover!
+          const cur = document.querySelector<HTMLElement>(`[data-navid="${h}"]`)
+          if (!cur) { store.moveHover(down ? 1 : -1); return }
+          const cr = cur.getBoundingClientRect()
+          const cx = cr.left + cr.width / 2
+          let best: string | null = null
+          let bestScore = Infinity
+          for (const id of store.navOrder) {
+            if (id === h) continue
+            const el = document.querySelector<HTMLElement>(`[data-navid="${id}"]`)
+            if (!el) continue
+            const r = el.getBoundingClientRect()
+            if (down ? r.top <= cr.top + 4 : r.top >= cr.top - 4) continue
+            const score = Math.abs(r.left + r.width / 2 - cx) + Math.abs(r.top - cr.top) * 0.3
+            if (score < bestScore) { bestScore = score; best = id }
+          }
+          if (best) store.setHoverTask(best)
+          return
+        }
+        if (e.key === 'Escape') { e.preventDefault(); store.setHoverTask(null); return } // 선택 해제 → 탭 포커스
+        // Enter/기타는 아래 공통 처리 (project=이동, task=상세/완료)
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const idx = store.navOrder.indexOf(hover!)
+        if (e.key === 'ArrowUp' && idx === 0) {
+          // 맨 위 태스크에서 ↑ : 할일 입력칸이 있으면 그쪽으로, 없으면 뷰 이동 모드로
+          const cap = document.querySelector<HTMLInputElement>('[data-capture]')
+          store.setHoverTask(null)
+          if (cap) cap.focus()
+        } else store.moveHover(e.key === 'ArrowDown' ? 1 : -1)
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+        e.preventDefault()
+        store.setHoverTask(null)
+        return
+      }
+
+      /* 프로젝트 선택 모드: Enter=프로젝트 이동, 태스크 전용 키 비활성 */
+      if (store.navKind === 'project') {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const p = store.projects.find(x => x.id === hover)
+          if (p) navigate(`/w/${p.workspace_id}/p/${p.id}`)
+        }
+        return
+      }
+
+      if (e.key === 'Enter') { e.preventDefault(); store.openDetail(hover!); return }
+      if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); store.toggleDone(hover!); return }
+      if (e.key === 'Delete') {
+        e.preventDefault()
+        const id = hover!
+        const t = store.tasks.find(x => x.id === id)
+        const order = store.navOrder
+        const idx = order.indexOf(id)
+        store.deleteTask(id)
+        const nextId = order[idx + 1] ?? order[idx - 1] ?? null
+        store.setHoverTask(nextId && nextId !== id ? nextId : null)
+        window.dispatchEvent(new CustomEvent('pd:flash', { detail: t ? `삭제: ${t.title} (Ctrl+Z로 복원)` : '삭제됨' }))
+        return
+      }
+
+      // 직관 letter 단축키
+      const openPicker = (field: 'scheduled_date' | 'deadline') => {
+        const t = store.tasks.find(x => x.id === hover)
+        pendingDate.current = { id: hover!, field }
+        const input = dateRef.current
+        if (input) {
+          input.value = (field === 'deadline' ? t?.deadline : t?.scheduled_date) ?? todayStr()
+          try { input.showPicker() } catch { input.focus() }
+        }
+      }
+      if (k === 't') { e.preventDefault(); store.updateTask(hover!, { scheduled_date: todayStr() }); return }
+      if (k === 's') { e.preventDefault(); openPicker('scheduled_date'); return }
+      if (k === 'y') { e.preventDefault(); store.updateTask(hover!, { someday: true }); return }
+      if (k === 'p') { e.preventDefault(); store.openDetail(hover!); return }
+      if (k === 'd') { e.preventDefault(); openPicker('deadline'); return }
+      if (k === 'i') { e.preventDefault(); store.updateTask(hover!, { scheduled_date: null, someday: false }); return }
+      if (e.key === '?') { e.preventDefault(); setHelp(h => !h) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate])
+
+  return (
+    <>
+      <input
+        ref={dateRef}
+        type="date"
+        className="pointer-events-none fixed -left-[9999px] opacity-0"
+        tabIndex={-1}
+        onChange={e => {
+          const p = pendingDate.current
+          if (p && e.target.value) useStore.getState().updateTask(p.id, { [p.field]: e.target.value })
+          pendingDate.current = null
+        }}
+      />
+      {help && (
+        <Modal title="단축키" onClose={() => setHelp(false)} width={440}>
+          <div className="space-y-1">
+            {SHORTCUTS.map(s => (
+              <div key={s.keys + s.desc} className="flex items-center justify-between gap-3 rounded px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                <span className="text-[12.5px] text-zinc-600 dark:text-zinc-300">{s.desc}</span>
+                <span className="flex shrink-0 gap-1">
+                  {s.keys.split(' ').map((key, i) =>
+                    key === '/' || key === '+' || key === '→' ? (
+                      <span key={i} className="text-[11px] text-zinc-400">{key}</span>
+                    ) : (
+                      <kbd key={i} className="rounded border border-zinc-300 bg-zinc-50 px-1.5 py-px text-[11px] font-semibold text-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {key}
+                      </kbd>
+                    ),
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+    </>
+  )
+}

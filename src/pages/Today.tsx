@@ -1,0 +1,400 @@
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, closestCorners,
+  useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
+  AlarmClockOff, CalendarX2, RefreshCw, Clock3, ListTodo, CalendarDays, Columns3, Rows3,
+  Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2,
+} from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import { useStore, selToday, selOverdue, useNavOrder } from '../store/store'
+import { useGcal } from '../store/gcalStore'
+import type { Task } from '../types'
+import { between } from '../lib/position'
+import { countCk } from '../lib/group'
+import { fmtDate, todayStr, toStr } from '../lib/dates'
+import { addDays } from 'date-fns'
+import TaskRow, { DeadlineBadge } from '../components/TaskRow'
+import ProjectChip from '../components/ProjectChip'
+import { Link } from 'react-router-dom'
+
+const NONE = 'none'
+
+export default function TodayPage() {
+  const todayTasks = useStore(useShallow(selToday))
+  const overdue = useStore(useShallow(selOverdue))
+  const sections = useStore(s => s.sections)
+  const updateTask = useStore(s => s.updateTask)
+  const addSection = useStore(s => s.addSection)
+  const addTask = useStore(s => s.addTask)
+  const allTasks = useStore(s => s.tasks)
+  const openDetail = useStore(s => s.openDetail)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [view, setView] = useState<'list' | 'board'>(() => (localStorage.getItem('pd-todayview') as 'list' | 'board') || 'list')
+  const setViewP = (v: 'list' | 'board') => { setView(v); localStorage.setItem('pd-todayview', v) }
+
+  const submit = () => {
+    const v = text.trim()
+    if (!v) return
+    addTask({ title: v, scheduled_date: todayStr() })
+    setText('')
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  )
+
+  const sorted = useMemo(() => [...sections].sort((a, b) => a.position - b.position), [sections])
+  const secIds = useMemo(() => new Set(sorted.map(s => s.id)), [sorted])
+  const keys = useMemo(() => [NONE, ...sorted.map(s => s.id)], [sorted])
+
+  const bySec = useMemo(() => {
+    const map: Record<string, Task[]> = {}
+    for (const k of keys) map[k] = []
+    for (const t of todayTasks) {
+      const k = t.today_section && secIds.has(t.today_section) ? t.today_section : NONE
+      map[k].push(t)
+    }
+    for (const k of keys)
+      map[k].sort((a, b) => (a.today_position ?? 1e12) - (b.today_position ?? 1e12) || a.created_at.localeCompare(b.created_at))
+    return map
+  }, [todayTasks, keys, secIds])
+
+  // 키보드 내비 순서: 지연 → 섹션 순서대로
+  useNavOrder(useMemo(
+    () => [...overdue.map(t => t.id), ...keys.flatMap(k => (bySec[k] ?? []).map(t => t.id))],
+    [overdue, keys, bySec],
+  ))
+
+  const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveId(null)
+    const { active, over } = e
+    if (!over) return
+    const taskId = String(active.id)
+    const task = allTasks.find(t => t.id === taskId)
+    if (!task) return
+
+    const overId = String(over.id)
+    let sec: string
+    let ids: string[]
+    let insertAt: number
+
+    if (overId.startsWith('sec:')) {
+      sec = overId.slice(4)
+      ids = (bySec[sec] ?? []).map(t => t.id).filter(id => id !== taskId)
+      insertAt = ids.length
+    } else {
+      const overTask = todayTasks.find(t => t.id === overId)
+      if (!overTask) return
+      sec = overTask.today_section && secIds.has(overTask.today_section) ? overTask.today_section : NONE
+      const col = bySec[sec] ?? []
+      const origIdx = col.findIndex(t => t.id === taskId)
+      const overIdx = col.findIndex(t => t.id === overId)
+      ids = col.map(t => t.id).filter(id => id !== taskId)
+      const overPos = ids.indexOf(overId)
+      insertAt = origIdx !== -1 && origIdx < overIdx ? overPos + 1 : overPos
+    }
+
+    const prevId = ids[insertAt - 1]
+    const nextId = ids[insertAt]
+    const prevPos = prevId ? todayTasks.find(t => t.id === prevId)?.today_position ?? undefined : undefined
+    const nextPos = nextId ? todayTasks.find(t => t.id === nextId)?.today_position ?? undefined : undefined
+    let pos = between(prevPos ?? undefined, nextPos ?? undefined)
+    if (Number.isNaN(pos)) pos = (insertAt + 1) * 1024
+
+    updateTask(taskId, {
+      scheduled_date: todayStr(),
+      today_section: sec === NONE ? null : sec,
+      today_position: pos,
+    })
+  }
+
+  const activeTask = activeId ? allTasks.find(t => t.id === activeId) : null
+  const doneCount = todayTasks.filter(t => t.status === 'done').length
+
+  return (
+    <div className={`mx-auto px-5 py-5 ${view === 'board' ? 'max-w-[1200px]' : 'max-w-[820px]'}`}>
+      <div className="mb-4 flex items-center gap-3">
+        <h1 className="text-[18px] font-bold tracking-tight">Today</h1>
+        <span className="text-[12.5px] font-medium text-zinc-400">{fmtDate(todayStr())} · {doneCount}/{todayTasks.length} 완료</span>
+        <div className="ml-auto flex items-center rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700">
+          <button
+            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-semibold ${view === 'list' ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+            onClick={() => setViewP('list')} title="리스트"
+          ><Rows3 size={13} /> 리스트</button>
+          <button
+            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-semibold ${view === 'board' ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
+            onClick={() => setViewP('board')} title="섹션 보드"
+          ><Columns3 size={13} /> 보드</button>
+        </div>
+        <button
+          className="btn !py-1 !text-[11.5px]"
+          onClick={() => {
+            const name = window.prompt('새 섹션 이름 (예: 아침, 오전, 집중시간)')
+            if (name?.trim()) addSection(name.trim())
+          }}
+        >
+          <Plus size={13} /> 섹션
+        </button>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900">
+        <Plus size={15} className="shrink-0 text-zinc-400" />
+        <input
+          data-capture
+          className="h-9 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-zinc-400"
+          placeholder="오늘 할 일을 입력 — Enter"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
+      </div>
+
+      {/* 1) 오늘 일정 (구글캘린더) — 최상단 */}
+      <TodayEvents />
+
+      {/* 2) 지연 */}
+      {overdue.length > 0 && (
+        <section className="mb-4 rounded-lg border border-red-200 bg-red-50/60 p-2.5 dark:border-red-900 dark:bg-red-950/30">
+          <div className="mb-1 flex items-center gap-2 px-1.5">
+            <AlarmClockOff size={14} className="text-red-500" />
+            <span className="text-[12.5px] font-bold text-red-600 dark:text-red-400">지연 {overdue.length}</span>
+            <button
+              className="ml-auto rounded px-1.5 py-0.5 text-[11.5px] font-semibold text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/50"
+              onClick={() => overdue.forEach(t => updateTask(t.id, { scheduled_date: todayStr() }))}
+            >
+              모두 오늘로 이동
+            </button>
+          </div>
+          {overdue.map(t => (
+            <TaskRow key={t.id} task={t} onOpen={openDetail} showDate
+              trailing={
+                <button
+                  className="invisible shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-blue-600 group-hover:visible hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                  onClick={e => { e.stopPropagation(); updateTask(t.id, { scheduled_date: todayStr() }) }}
+                >
+                  오늘로
+                </button>
+              }
+            />
+          ))}
+        </section>
+      )}
+
+      {/* 3) 섹션 — 리스트(세로) 또는 보드(가로 컬럼) */}
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <div className={view === 'board' ? 'flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 md:snap-none' : ''}>
+          {keys.map((k, i) => (
+            <Section
+              key={k}
+              secKey={k}
+              name={k === NONE ? '미지정' : sorted.find(s => s.id === k)?.name ?? k}
+              tasks={bySec[k] ?? []}
+              onOpen={openDetail}
+              isFirst={i <= 1}
+              isLast={i === keys.length - 1}
+              board={view === 'board'}
+            />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeTask ? (
+            <div className="rounded-md border border-blue-300 bg-white px-3 py-2 text-[13px] shadow-lg dark:border-blue-700 dark:bg-zinc-800">
+              {activeTask.title}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {todayTasks.length === 0 && overdue.length === 0 && (
+        <div className="mt-3 rounded-lg border border-dashed border-zinc-300 p-10 text-center text-[13px] text-zinc-400 dark:border-zinc-700">
+          오늘 예정된 태스크가 없습니다
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ───── 오늘 일정 카드 (구글캘린더, 공유 스토어) ───── */
+function TodayEvents() {
+  const gcal = useGcal()
+  const today = todayStr()
+
+  useEffect(() => {
+    void gcal.init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (gcal.status === 'connected') void gcal.ensureRange(today, toStr(addDays(new Date(), 1)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gcal.status])
+
+  if (gcal.status === 'disabled') return null
+  const events = gcal.eventsOn(today)
+
+  return (
+    <section className="mb-4 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-1 flex items-center gap-1.5 px-1">
+        <CalendarDays size={13.5} className="text-zinc-400" />
+        <span className="text-[12px] font-bold text-zinc-500 dark:text-zinc-400">오늘 일정</span>
+        {gcal.status === 'connected' && (
+          <button className="ml-auto rounded p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => void gcal.refresh()} title="새로고침">
+            <RefreshCw size={13} />
+          </button>
+        )}
+      </div>
+
+      {gcal.status === 'disconnected' && (
+        <div className="flex flex-wrap items-center gap-2 px-1 py-1">
+          <CalendarX2 size={15} className="text-zinc-300 dark:text-zinc-600" />
+          <span className="text-[12px] text-zinc-400">캘린더 연결이 만료되었거나 아직 연결 전입니다.</span>
+          <button className="btn btn-primary !py-1 !text-[12px]" onClick={() => void gcal.connect()}>구글캘린더 연결</button>
+          {gcal.errDetail && <span className="w-full text-[10.5px] break-all text-red-400">{gcal.errDetail}</span>}
+        </div>
+      )}
+      {gcal.status === 'api_disabled' && (
+        <p className="px-1 py-1 text-[12px] text-amber-600 dark:text-amber-400">
+          Google Calendar API가 사용 설정되지 않았습니다 —{' '}
+          <a className="underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">활성화</a> 후 새로고침.
+        </p>
+      )}
+      {gcal.status === 'error' && (
+        <p className="px-1 py-1 text-[12px] text-red-500">일정을 불러오지 못했습니다. {gcal.errDetail}</p>
+      )}
+      {gcal.status === 'loading' && <p className="px-1 py-1 text-[12px] text-zinc-400">불러오는 중…</p>}
+      {gcal.status === 'connected' && (
+        events.length === 0
+          ? <p className="px-1 py-1 text-[12px] text-zinc-400">오늘 일정이 없습니다. <Link to="/settings" className="underline">캘린더 선택</Link></p>
+          : (
+            <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+              {events.map(ev => (
+                <div key={ev.id} className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                  <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: ev.color ?? '#3b82f6' }} />
+                  <span className="w-[84px] shrink-0 text-[11.5px] font-semibold text-zinc-400">
+                    {ev.allDay ? '종일' : `${ev.start.slice(11, 16)}–${ev.end.slice(11, 16)}`}
+                  </span>
+                  <span className="truncate text-[12.5px] font-medium">{ev.summary}</span>
+                </div>
+              ))}
+            </div>
+          )
+      )}
+    </section>
+  )
+}
+
+function Section({
+  secKey, name, tasks, onOpen, isFirst, isLast, board,
+}: {
+  secKey: string
+  name: string
+  tasks: Task[]
+  onOpen: (id: string) => void
+  isFirst: boolean
+  isLast: boolean
+  board?: boolean
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `sec:${secKey}` })
+  const renameSection = useStore(s => s.renameSection)
+  const deleteSection = useStore(s => s.deleteSection)
+  const moveSection = useStore(s => s.moveSection)
+  const custom = secKey !== NONE
+
+  return (
+    <section
+      ref={setNodeRef}
+      className={
+        board
+          ? `flex max-h-[70vh] w-[82vw] shrink-0 snap-start flex-col rounded-lg border bg-zinc-100/60 p-1.5 transition-colors md:w-[280px] dark:bg-zinc-900/50 ${
+              isOver ? 'border-blue-400 !bg-blue-50/50 dark:border-blue-600 dark:!bg-blue-950/20' : 'border-zinc-200 dark:border-zinc-800'
+            }`
+          : `mb-3 rounded-lg border p-1.5 transition-colors ${
+              isOver ? 'border-blue-400 bg-blue-50/40 dark:border-blue-600 dark:bg-blue-950/20' : 'border-transparent'
+            }`
+      }
+    >
+      <div className="group mb-0.5 flex items-center gap-1.5 px-2 text-zinc-400">
+        {custom ? <Clock3 size={13.5} /> : <ListTodo size={13.5} />}
+        <span className="text-[12px] font-bold tracking-wide">{name}</span>
+        <span className="text-[11px] font-semibold">{tasks.length || ''}</span>
+        {custom && (
+          <span className="invisible flex items-center gap-0.5 group-hover:visible">
+            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="위로" disabled={isFirst}
+              onClick={() => moveSection(secKey, -1)}><ChevronUp size={12.5} /></button>
+            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="아래로" disabled={isLast}
+              onClick={() => moveSection(secKey, 1)}><ChevronDown size={12.5} /></button>
+            <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="이름 변경"
+              onClick={() => {
+                const v = window.prompt('섹션 이름', name)
+                if (v?.trim()) renameSection(secKey, v.trim())
+              }}><Pencil size={12} /></button>
+            <button className="rounded p-0.5 hover:text-red-600" title="섹션 삭제 (태스크는 미지정으로)"
+              onClick={() => {
+                if (window.confirm(`섹션 "${name}"을 삭제할까요? 배정된 태스크는 미지정으로 이동합니다.`)) deleteSection(secKey)
+              }}><Trash2 size={12} /></button>
+          </span>
+        )}
+      </div>
+      <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+        <div className={board ? 'flex min-h-[60px] flex-1 flex-col gap-1.5 overflow-y-auto px-0.5' : 'min-h-[8px]'}>
+          {tasks.map(t => <SortableRow key={t.id} task={t} onOpen={onOpen} board={board} />)}
+        </div>
+      </SortableContext>
+    </section>
+  )
+}
+
+function SortableRow({ task, onOpen, board }: { task: Task; onOpen: (id: string) => void; board?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+      className={isDragging ? 'opacity-40' : ''}
+    >
+      {board ? <BoardCard task={task} onOpen={onOpen} /> : <TaskRow task={task} onOpen={onOpen} />}
+    </div>
+  )
+}
+
+/** 보드 컬럼용 컴팩트 카드 (좁은 폭에 맞춤 — QuickBar 없음) */
+function BoardCard({ task, onOpen }: { task: Task; onOpen: (id: string) => void }) {
+  const toggleDone = useStore(s => s.toggleDone)
+  const done = task.status === 'done'
+  const ckTotal = countCk(task.checklist)
+  const ckDone = countCk(task.checklist, true)
+  return (
+    <div
+      className={`cursor-pointer rounded-md border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800/90 dark:hover:border-blue-600 ${done ? 'opacity-60' : ''}`}
+      onClick={() => onOpen(task.id)}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          className={`mt-px shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
+          onClick={e => { e.stopPropagation(); toggleDone(task.id) }}
+          onPointerDown={e => e.stopPropagation()}
+          title={done ? '완료 취소' : '완료'}
+        >
+          {done ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className={`text-[12.5px] leading-snug break-words ${done ? 'text-zinc-400 line-through' : ''}`}>{task.title}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden">
+            {ckTotal > 0 && <span className="text-[11px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>}
+            {task.deadline && !done && <DeadlineBadge deadline={task.deadline} />}
+            <ProjectChip projectId={task.project_id} workspaceId={task.workspace_id} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

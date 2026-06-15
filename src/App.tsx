@@ -1,0 +1,115 @@
+import { Suspense, useEffect, useRef, useState } from 'react'
+import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { Inbox, Sun, CalendarDays, LayoutGrid, Settings as SettingsIcon } from 'lucide-react'
+import Sidebar, { useTheme } from './components/Sidebar'
+import QuickCapture from './components/QuickCapture'
+import Shortcuts from './components/Shortcuts'
+import TaskDetail from './components/TaskDetail'
+import TodayPage from './pages/Today'
+import InboxPage from './pages/Inbox'
+import ScheduledPage from './pages/Scheduled'
+import SomedayPage from './pages/Someday'
+import CalendarPage from './pages/Calendar'
+import WorkspacePage from './pages/Workspace'
+import ProjectPage from './pages/Project'
+import SettingsPage from './pages/Settings'
+import GuidePage from './pages/Guide'
+import WorkspaceListPage from './pages/WorkspaceList'
+import { useStore } from './store/store'
+
+export default function App() {
+  const { dark, toggle } = useTheme()
+  const fetchAll = useStore(s => s.fetchAll)
+  const loaded = useStore(s => s.loaded)
+  const detailTaskId = useStore(s => s.detailTaskId)
+  const openDetail = useStore(s => s.openDetail)
+  const hiddenAt = useRef<number | null>(null)
+
+  useEffect(() => {
+    void fetchAll()
+  }, [fetchAll])
+
+  // 5분 이상 hidden 후 복귀 시 refetch (outbox 비어있을 때만 — store에서 가드)
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt.current = Date.now()
+      } else if (hiddenAt.current && Date.now() - hiddenAt.current > 5 * 60_000) {
+        hiddenAt.current = null
+        void fetchAll()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [fetchAll])
+
+  return (
+    <BrowserRouter>
+      <div className="flex h-full">
+        <Sidebar dark={dark} onToggleTheme={toggle} />
+        <main className="min-w-0 flex-1 overflow-y-auto pb-14 md:pb-0">
+          {!loaded ? (
+            <div className="flex h-full items-center justify-center text-[13px] text-zinc-400">불러오는 중…</div>
+          ) : (
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-[13px] text-zinc-400">불러오는 중…</div>}>
+              <Routes>
+                <Route path="/" element={<TodayPage />} />
+                <Route path="/inbox" element={<InboxPage />} />
+                <Route path="/scheduled" element={<ScheduledPage />} />
+                <Route path="/someday" element={<SomedayPage />} />
+                <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/workspaces" element={<WorkspaceListPage />} />
+                <Route path="/w/:wsId" element={<WorkspacePage />} />
+                <Route path="/w/:wsId/p/:projectId" element={<ProjectPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/guide" element={<GuidePage />} />
+              </Routes>
+            </Suspense>
+          )}
+        </main>
+      </div>
+      <MobileNav />
+      <QuickCapture />
+      <Shortcuts />
+      <Flash />
+      {detailTaskId && <TaskDetail taskId={detailTaskId} onClose={() => openDetail(null)} />}
+    </BrowserRouter>
+  )
+}
+
+/** 하단 일시 알림 (pd:flash 이벤트) */
+function Flash() {
+  const [msg, setMsg] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const onFlash = (e: Event) => {
+      setMsg(String((e as CustomEvent).detail))
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(() => setMsg(null), 2200)
+    }
+    window.addEventListener('pd:flash', onFlash)
+    return () => window.removeEventListener('pd:flash', onFlash)
+  }, [])
+  if (!msg) return null
+  return (
+    <div className="fixed bottom-16 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-1.5 text-[12.5px] font-medium text-white shadow-lg md:bottom-6 dark:bg-zinc-100 dark:text-zinc-900">
+      {msg}
+    </div>
+  )
+}
+
+function MobileNav() {
+  const cls = ({ isActive }: { isActive: boolean }) =>
+    `flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'
+    }`
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-zinc-200 bg-white/95 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+      <NavLink to="/" end className={cls}><Sun size={18} />Today</NavLink>
+      <NavLink to="/inbox" className={cls}><Inbox size={18} />Inbox</NavLink>
+      <NavLink to="/calendar" className={cls}><CalendarDays size={18} />Calendar</NavLink>
+      <NavLink to="/workspaces" className={cls}><LayoutGrid size={18} />워크스페이스</NavLink>
+      <NavLink to="/settings" className={cls}><SettingsIcon size={18} />설정</NavLink>
+    </nav>
+  )
+}
