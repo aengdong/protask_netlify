@@ -3,12 +3,12 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
   useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
-import { Moon, Sun, CalendarDays, Clock3, ListTodo } from 'lucide-react'
+import { Moon, Sun, CalendarDays, Clock3, ListTodo, Folder } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { addDays } from 'date-fns'
-import { useStore, selSomeday, useNavOrder } from '../store/store'
+import { useStore, selSomeday, useNavOrder, projectColor } from '../store/store'
 import { todayStr, toStr } from '../lib/dates'
-import { wsColor, type Task } from '../types'
+import type { Task } from '../types'
 import TaskRow from '../components/TaskRow'
 
 /** Someday(언젠가) — Inbox와 동일 구성. 날짜 배정 시 Someday에서 빠져나감(칸반 백로그와 동일 집합) */
@@ -117,17 +117,17 @@ export default function SomedayPage() {
 
         {noWs.length > 0 && (
           <section className="mb-4">
-            {groups.length > 0 && <GroupHead label="미분류" color="#71717a" count={noWs.length} />}
+            {groups.length > 0 && <GroupHead label="미분류" count={noWs.length} />}
             {noWs.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
           </section>
         )}
 
         {groups.map(({ ws, subs, noProj, total }) => (
           <section key={ws.id} className="mb-4">
-            <GroupHead label={ws.name} color={wsColor(ws.id, workspaces)} count={total} />
+            <GroupHead label={ws.name} count={total} />
             {subs.map(s => (
               <div key={s.project.id} className="mb-1.5">
-                <SubHead label={s.project.title} count={s.tasks.length} />
+                <SubHead label={s.project.title} count={s.tasks.length} color={projectColor(s.project.id, projects)} />
                 {s.tasks.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
               </div>
             ))}
@@ -186,20 +186,21 @@ function DropZone({ id, icon, label, accent }: { id: string; icon: React.ReactNo
   )
 }
 
-function GroupHead({ label, color, count }: { label: string; color: string; count: number }) {
+function GroupHead({ label, count }: { label: string; count: number }) {
   return (
     <div className="mb-0.5 flex items-baseline gap-1.5 px-1.5">
-      <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: color }} />
+      <Folder size={12} className="shrink-0 self-center text-zinc-400" />
       <span className="text-[12px] font-bold">{label}</span>
       <span className="text-[11px] font-semibold text-zinc-400">{count}</span>
     </div>
   )
 }
 
-/** 워크스페이스 아래 프로젝트 소제목 (들여쓰기) */
-function SubHead({ label, count, muted }: { label: string; count: number; muted?: boolean }) {
+/** 워크스페이스 아래 프로젝트 소제목 (들여쓰기, 프로젝트 색 점) */
+function SubHead({ label, count, muted, color }: { label: string; count: number; muted?: boolean; color?: string }) {
   return (
     <div className="mt-0.5 mb-0.5 flex items-baseline gap-1.5 pl-4">
+      {color && <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: color }} />}
       <span className={`text-[11.5px] font-semibold ${muted ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-300'}`}>{label}</span>
       <span className="text-[10.5px] font-semibold text-zinc-400">{count}</span>
     </div>

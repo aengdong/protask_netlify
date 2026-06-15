@@ -3,12 +3,12 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
   useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
-import { Plus, Sun, CalendarDays, Clock3, Moon } from 'lucide-react'
+import { Plus, Sun, CalendarDays, Clock3, Moon, Folder } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { addDays } from 'date-fns'
 import { useStore, selInbox, useNavOrder } from '../store/store'
 import { parseQuick, todayStr, toStr } from '../lib/dates'
-import { wsColor, type Task } from '../types'
+import type { Task } from '../types'
 import TaskRow from '../components/TaskRow'
 
 export default function InboxPage() {
@@ -104,14 +104,14 @@ export default function InboxPage() {
 
         {noWs.length > 0 && (
           <section className="mb-4">
-            {groups.length > 0 && <GroupHead label="미분류" color="#71717a" count={noWs.length} />}
+            {groups.length > 0 && <GroupHead label="미분류" count={noWs.length} />}
             {noWs.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
           </section>
         )}
 
         {groups.map(({ ws, tasks }) => (
           <section key={ws.id} className="mb-4">
-            <GroupHead label={ws.name} color={wsColor(ws.id, workspaces)} count={tasks.length} />
+            <GroupHead label={ws.name} count={tasks.length} />
             {tasks.map(t => <DraggableRow key={t.id} task={t} onOpen={openDetail} />)}
           </section>
         ))}
@@ -162,12 +162,11 @@ function DropZone({ id, icon, label, accent }: { id: string; icon: React.ReactNo
   )
 }
 
-function GroupHead({ label, sub, color, count }: { label: string; sub?: string; color: string; count: number }) {
+function GroupHead({ label, count }: { label: string; count: number }) {
   return (
     <div className="mb-0.5 flex items-baseline gap-1.5 px-1.5">
-      <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: color }} />
+      <Folder size={12} className="shrink-0 self-center text-zinc-400" />
       <span className="text-[12px] font-bold">{label}</span>
-      {sub && <span className="text-[10.5px] font-medium text-zinc-400">{sub}</span>}
       <span className="text-[11px] font-semibold text-zinc-400">{count}</span>
     </div>
   )

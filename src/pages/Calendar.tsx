@@ -6,9 +6,9 @@ import {
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
 import { ChevronDown, ChevronLeft, ChevronRight, Flag, Inbox, Moon, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, selInbox, selSomeday } from '../store/store'
+import { useStore, selInbox, selSomeday, projectColor } from '../store/store'
 import { useGcal } from '../store/gcalStore'
-import { wsColor, type Task } from '../types'
+import type { Task } from '../types'
 import { todayStr, toStr } from '../lib/dates'
 import { eventDays, type GcalEvent } from '../lib/gcal'
 import ProjectChip from '../components/ProjectChip'
@@ -232,7 +232,7 @@ export default function CalendarPage() {
                     tasks={byDate.get(ds) ?? []}
                     deadlines={deadlineByDate.get(ds) ?? []}
                     events={eventsByDate.get(ds) ?? []}
-                    wsColorOf={id => wsColor(id, workspaces)}
+                    colorOf={t => projectColor(t.project_id, projects)}
                     onOpen={openDetail}
                     onEventOpen={setModalEvent}
                     onCreate={canCreateEvent ? setCreateDate : undefined}
@@ -282,7 +282,7 @@ export default function CalendarPage() {
 }
 
 function DayCell({
-  date, dateStr, inMonth, isToday, maxTasks, tasks, deadlines, events, wsColorOf, onOpen, onEventOpen, onCreate,
+  date, dateStr, inMonth, isToday, maxTasks, tasks, deadlines, events, colorOf, onOpen, onEventOpen, onCreate,
 }: {
   date: Date
   dateStr: string
@@ -292,7 +292,7 @@ function DayCell({
   tasks: Task[]
   deadlines: Task[]
   events: GcalEvent[]
-  wsColorOf: (id: string | null) => string
+  colorOf: (t: Task) => string
   onOpen: (id: string) => void
   onEventOpen: (ev: GcalEvent) => void
   onCreate?: (date: string) => void
@@ -326,7 +326,7 @@ function DayCell({
       </div>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
         {events.map(ev => <EventChip key={'ev' + ev.id} ev={ev} onOpen={onEventOpen} />)}
-        {tasks.slice(0, maxTasks).map(t => <CalChip key={t.id} task={t} color={wsColorOf(t.workspace_id)} onOpen={onOpen} />)}
+        {tasks.slice(0, maxTasks).map(t => <CalChip key={t.id} task={t} color={colorOf(t)} onOpen={onOpen} />)}
         {tasks.length > maxTasks && <div className="px-1 text-[11.5px] font-medium text-zinc-400">+{tasks.length - maxTasks}개 더</div>}
         {deadlines.map(t => (
           <button

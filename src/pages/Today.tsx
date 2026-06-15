@@ -7,12 +7,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import {
   CalendarX2, RefreshCw, CalendarDays, Columns3, Rows3,
-  Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2,
+  Plus, Pencil, Trash2, ChevronUp, ChevronDown, Circle, CheckCircle2, Folder,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, selToday, selOverdue, useNavOrder } from '../store/store'
+import { useStore, selToday, selOverdue, useNavOrder, projectColor } from '../store/store'
 import { useGcal } from '../store/gcalStore'
-import { wsColor, type Task } from '../types'
+import type { Task } from '../types'
 import { between } from '../lib/position'
 import { countCk } from '../lib/group'
 import { fmtDate, todayStr, toStr, daysFromToday } from '../lib/dates'
@@ -93,7 +93,7 @@ export default function TodayPage() {
     const withProj = projects
       .filter(p => todayTasks.some(t => t.project_id === p.id))
       .sort((a, b) => (wsIndex.get(a.workspace_id) ?? 0) - (wsIndex.get(b.workspace_id) ?? 0) || a.position - b.position)
-      .map(p => ({ id: p.id, label: p.title, color: wsColor(p.workspace_id, workspaces), tasks: todayTasks.filter(t => t.project_id === p.id) }))
+      .map(p => ({ id: p.id, label: p.title, color: projectColor(p.id, projects), tasks: todayTasks.filter(t => t.project_id === p.id) }))
     const noProj = todayTasks.filter(t => !t.project_id)
     return noProj.length ? [{ id: '__noproj', label: '프로젝트 없음', color: '#71717a', tasks: noProj }, ...withProj] : withProj
   }, [todayTasks, projects, workspaces])
@@ -293,13 +293,13 @@ export default function TodayPage() {
           <div className="mb-2">
             {wsGroups.noWs.length > 0 && (
               <div className="mb-3">
-                {wsGroups.groups.length > 0 && <WsHeader label="미분류" color="#71717a" />}
+                {wsGroups.groups.length > 0 && <WsHeader label="미분류" />}
                 {wsGroups.noWs.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
               </div>
             )}
             {wsGroups.groups.map(({ ws, subs, noProj }) => (
               <div key={ws.id} className="mb-3">
-                <WsHeader label={ws.name} color={wsColor(ws.id, workspaces)} />
+                <WsHeader label={ws.name} />
                 {subs.map(s => (
                   <div key={s.project.id} className="mb-1.5">
                     <SubLabel label={s.project.title} />
@@ -433,11 +433,11 @@ function AddSectionBtn({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-/** 프로젝트 각도: 워크스페이스 헤더 (색 점 + 이름) */
-function WsHeader({ label, color }: { label: string; color: string }) {
+/** 프로젝트 각도: 워크스페이스 헤더 (폴더 + 이름, 색상은 프로젝트에만) */
+function WsHeader({ label }: { label: string }) {
   return (
     <div className="mb-0.5 flex items-baseline gap-1.5 px-1.5">
-      <span className="h-2 w-2 shrink-0 self-center rounded-[3px]" style={{ background: color }} />
+      <Folder size={13} className="shrink-0 self-center text-zinc-400" />
       <span className="text-[13px] font-bold tracking-tight">{label}</span>
     </div>
   )
