@@ -6,18 +6,19 @@ import { todayStr } from '../lib/dates'
 
 /**
  * 전역 단축키.
- *  선택 없음:  ↑/↓ 뷰 이동(Inbox/Today/Scheduled/Someday/Calendar/워크스페이스) · → 할일 입력칸 포커스(없으면 첫 태스크) · Enter 첫 태스크 선택
+ *  선택 없음:  1~5 뷰 이동(Inbox/Today/Scheduled/Someday/Calendar) · → 할일 입력칸 포커스(없으면 첫 태스크) · Enter 첫 태스크 선택
  *  할일 입력칸: ↓ 첫 태스크 선택 · ↑(첫 태스크에서) 입력칸 복귀 · Esc 입력 해제 · Enter 작성
  *  태스크 선택: ↑/↓ 이동 · ←/Esc 해제 · T 오늘 · S 날짜선택 · Y Someday · P 프로젝트 · D 마감일 · I Inbox · Space 완료 · Enter 상세 · Del 삭제
  *  ←/→ 탭 전환(워크스페이스·프로젝트) · Backspace 뒤로가기
  *  Alt+1~5 뷰 직접이동 · Alt+Shift+1~9 워크스페이스 · Ctrl+K 캡처 · Ctrl+Z 실행취소 · ? 도움말
  */
 export const SHORTCUTS: { keys: string; desc: string }[] = [
-  { keys: '↑ / ↓', desc: '선택 없음: 뷰 이동 · 선택 시: 태스크 이동' },
+  { keys: '1~5', desc: '뷰 이동: Inbox·Today·Scheduled·Someday·Calendar' },
+  { keys: '↑ / ↓', desc: '선택 태스크 이동 / 탭 화면(워크·프로젝트) 항목 선택' },
   { keys: '→', desc: '뷰에서: 할일 입력칸 포커스(Inbox/Today/Someday) · 없으면 첫 태스크' },
   { keys: '↑ / ↓', desc: '할일 입력칸 ↔ 첫 태스크 (↓ 진입 · ↑ 복귀) · Esc 입력 해제' },
   { keys: 'Enter', desc: '뷰에서: 첫 태스크 선택' },
-  { keys: '← / Esc', desc: '선택 해제 (뷰 이동으로)' },
+  { keys: '← / Esc', desc: '선택 해제' },
   { keys: '→ / ←', desc: '선택 태스크: 퀵액션 포커스 이동 · Enter 적용' },
   { keys: '1~6', desc: '선택 태스크: Inbox·Today·Scheduled·Someday·Project·Deadline' },
   { keys: '0', desc: '선택 태스크: 중요 표시 토글' },
@@ -33,7 +34,6 @@ export const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: '← / →', desc: '워크스페이스·프로젝트: 탭 전환 (선택 없을 때)' },
   { keys: 'Backspace', desc: '뒤로가기' },
   { keys: 'W / M', desc: '캘린더: 주간 / 월간 전환' },
-  { keys: 'Alt + 1~5', desc: '뷰 직접 이동' },
   { keys: 'Alt + Shift + 1~9', desc: '워크스페이스 이동' },
   { keys: 'Ctrl K', desc: '빠른 캡처 (Inbox)' },
   { keys: 'Ctrl Z', desc: '실행취소' },
@@ -110,33 +110,21 @@ export default function Shortcuts() {
 
       /* ───── 뷰 이동 모드 (선택 없음) ───── */
       if (!hasSel && !store.detailTaskId) {
-        // ←/→ : 탭 전환 (셸이 등록한 경우) — 콘텐츠 포커스로 복귀
+        // 1~5 : 좌측 사이드패널 뷰 직접 이동 (방향키 뷰 이동 대체)
+        if (/^[1-5]$/.test(e.key)) { e.preventDefault(); navigate(VIEW_PATHS[Number(e.key) - 1]); return }
+        // ←/→ : 탭 전환 (워크스페이스·프로젝트 화면)
         if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && store.tabNav) {
           e.preventDefault()
-          store.setSidebarFocus(false)
           const { keys, active, set } = store.tabNav
           const i = keys.indexOf(active)
           const ni = e.key === 'ArrowRight' ? Math.min(keys.length - 1, i + 1) : Math.max(0, i - 1)
           if (ni !== i) set(keys[ni])
           return
         }
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          // 워크스페이스·프로젝트(탭 있는 화면): 사이드바 대신 오른쪽 화면 항목 선택 (Esc로 사이드바 포커스 시 제외)
-          if (store.tabNav && !store.sidebarFocus) {
-            if (store.navOrder.length) {
-              e.preventDefault()
-              store.setHoverTask(e.key === 'ArrowDown' ? store.navOrder[0] : store.navOrder[store.navOrder.length - 1])
-            }
-            return
-          }
+        // ↑/↓ : 탭 화면에서 오른쪽 콘텐츠 첫/마지막 항목 선택 (뷰 간 이동은 1~5로 대체·제거)
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && store.tabNav && store.navOrder.length) {
           e.preventDefault()
-          const paths = [...VIEW_PATHS, ...store.workspaces.map(w => `/w/${w.id}`)]
-          const path = window.location.pathname
-          let cur = paths.indexOf(path)
-          if (cur === -1) cur = paths.findIndex(p => p.startsWith('/w/') && path.startsWith(p))
-          if (cur === -1) cur = path === '/' ? 1 : 0
-          const next = Math.min(paths.length - 1, Math.max(0, cur + (e.key === 'ArrowDown' ? 1 : -1)))
-          if (next !== cur) navigate(paths[next])
+          store.setHoverTask(e.key === 'ArrowDown' ? store.navOrder[0] : store.navOrder[store.navOrder.length - 1])
           return
         }
         // → : 할일 입력칸으로 포커스 (Inbox/Today/Someday). 입력칸 없으면 첫 태스크 선택
@@ -150,12 +138,6 @@ export default function Shortcuts() {
         if (e.key === 'Enter' && store.navOrder.length) {
           e.preventDefault()
           store.setHoverTask(store.navOrder[0])
-          return
-        }
-        // Esc : 탭 화면에서 선택 없을 때 → 사이드바 포커스(↑/↓로 Inbox 등 이동)
-        if (e.key === 'Escape' && store.tabNav) {
-          e.preventDefault()
-          store.setSidebarFocus(true)
           return
         }
         if (e.key === '?') { e.preventDefault(); setHelp(h => !h) }
