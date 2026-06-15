@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Download, CalendarCheck2, Unplug } from 'lucide-react'
+import { Download, CalendarCheck2, Unplug, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { gcalEnabled } from '../lib/gcal'
 import { useGcal } from '../store/gcalStore'
+import { useAuth, REQUIRE_AUTH } from '../store/authStore'
 
 export default function SettingsPage() {
   const [exporting, setExporting] = useState(false)
   const gcal = useGcal()
+  const session = useAuth(s => s.session)
+  const signOut = useAuth(s => s.signOut)
 
   useEffect(() => {
     void gcal.init()
@@ -98,6 +101,16 @@ export default function SettingsPage() {
           <button className="btn btn-primary" onClick={() => void gcal.connect()}>연결</button>
         )}
       </section>
+
+      {REQUIRE_AUTH && session && (
+        <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-1 flex items-center gap-1.5 text-[13.5px] font-bold"><LogOut size={14} /> 계정</h2>
+          <p className="mb-3 text-[12.5px] text-zinc-400">{session.user.email ?? '로그인됨'}</p>
+          <button className="btn" onClick={() => void signOut()}>
+            <LogOut size={13} /> 로그아웃
+          </button>
+        </section>
+      )}
 
       <p className="mt-6 text-center text-[12.5px] text-zinc-400">
         사용법·단축키·GTD 개념은 <Link to="/guide" className="text-blue-600 underline dark:text-blue-400">사용 설명서</Link>에서 확인하세요.

@@ -20,7 +20,7 @@ A local-first, installable (PWA) alternative to Akiflow / Todoist that runs on _
 </div>
 
 > [!IMPORTANT]
-> **Protask is a single-instance app.** It has **no login and no row-level security** — one Supabase instance = one user (or a small, trusted group sharing the same data). It is **not** multi-tenant. Run your own instance; don't point untrusted users at a shared one. (Multi-user auth/RLS is on the [roadmap](#roadmap).)
+> **Protask is a single-instance app.** By default it has **no login** — one Supabase instance = one user (or a small, trusted group sharing the same data). It is **not** multi-tenant. Run your own instance; don't point untrusted users at a shared one. To safely use your public URL from any device, enable **[Private mode](#-private-mode-lock-to-your-account)** (Google sign-in + Row-Level Security). Full multi-user auth is on the [roadmap](#roadmap).
 
 ## ✨ Features
 
@@ -79,6 +79,19 @@ Import the repo into Vercel and add the environment variables `VITE_SUPABASE_URL
 3. Token proxy (`api/google-token.ts`, a Vercel function): set server env `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optionally `APP_ORIGINS` to restrict CORS). For local dev, set `VITE_API_BASE` to your deployed URL.
 
 Leave `VITE_GOOGLE_CLIENT_ID` blank to disable the integration.
+
+## 🔒 Private mode (lock to your account)
+
+By default Protask has no login, so anyone with your URL sees your data. To use the same public URL across your phone and computers while keeping it private to you:
+
+1. **Supabase → Authentication → Providers → Google**: enable it, paste a Google OAuth Client ID + Secret. In Google Cloud Console add Supabase's callback `https://<project-ref>.supabase.co/auth/v1/callback` to the client's authorized redirect URIs.
+2. **Supabase → Authentication → URL Configuration**: set Site URL to your deployment and add your URLs (e.g. `https://your-app.vercel.app`, `http://localhost:5173`) to Redirect URLs.
+3. **Run the migration** `supabase/migrations/0005_rls.sql` (enables Row-Level Security — only signed-in requests can touch the data).
+4. **Frontend**: set `VITE_REQUIRE_AUTH=true` (in `.env` and in Vercel). Redeploy.
+5. **Sign in once** with your Google account, then in Supabase Auth **disable new sign-ups** so only your account exists.
+6. **MCP server**: since RLS blocks the anon key, set the MCP's `SUPABASE_KEY` to your **service_role** key (it bypasses RLS — keep it server-side only, never in the frontend).
+
+To revert, set `VITE_REQUIRE_AUTH=false` and `disable row level security` on the tables.
 
 ## 🧱 Tech stack
 

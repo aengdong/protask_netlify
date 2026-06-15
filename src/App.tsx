@@ -15,7 +15,9 @@ import ProjectPage from './pages/Project'
 import SettingsPage from './pages/Settings'
 import GuidePage from './pages/Guide'
 import WorkspaceListPage from './pages/WorkspaceList'
+import Login from './components/Login'
 import { useStore } from './store/store'
+import { useAuth, REQUIRE_AUTH } from './store/authStore'
 
 export default function App() {
   const { dark, toggle } = useTheme()
@@ -23,11 +25,15 @@ export default function App() {
   const loaded = useStore(s => s.loaded)
   const detailTaskId = useStore(s => s.detailTaskId)
   const openDetail = useStore(s => s.openDetail)
+  const session = useAuth(s => s.session)
+  const authReady = useAuth(s => s.ready)
   const hiddenAt = useRef<number | null>(null)
+  const authed = !REQUIRE_AUTH || !!session
 
   useEffect(() => {
+    if (!authed) return // 로그인 전에는 데이터를 불러오지 않음(RLS로 어차피 거부됨)
     void fetchAll()
-  }, [fetchAll])
+  }, [fetchAll, authed])
 
   // 5분 이상 hidden 후 복귀 시 refetch (outbox 비어있을 때만 — store에서 가드)
   useEffect(() => {
@@ -42,6 +48,13 @@ export default function App() {
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [fetchAll])
+
+  if (REQUIRE_AUTH && !authReady) {
+    return <div className="flex h-full items-center justify-center text-[13px] text-zinc-400">불러오는 중…</div>
+  }
+  if (REQUIRE_AUTH && !session) {
+    return <Login />
+  }
 
   return (
     <BrowserRouter>
