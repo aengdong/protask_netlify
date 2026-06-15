@@ -45,7 +45,7 @@ function WorkspaceItem({ ws }: { ws: Workspace }) {
               to={`/w/${ws.id}/p/${p.id}`}
               title={p.title}
               className={({ isActive }) => `flex items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] transition-colors ${
-                isActive ? 'bg-zinc-200/70 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
+                isActive ? 'bg-zinc-200/70 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
               }`}
             >
               <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: projectColor(p.id, projects) }} />
