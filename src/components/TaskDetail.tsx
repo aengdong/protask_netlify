@@ -6,7 +6,7 @@ import { todayStr, toStr } from '../lib/dates'
 import { addDays } from 'date-fns'
 import Checklist from './Checklist'
 
-/** 태스크 상세 — 중앙 팝업 */
+/** 태스크 상세 — 오른쪽 도킹 패널(리스트 안 가림, 다른 태스크 클릭 시 교체) */
 export default function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const task = useStore(s => s.tasks.find(t => t.id === taskId))
   const projects = useStore(s => s.projects)
@@ -50,14 +50,11 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
   const sortedSections = [...sections].sort((a, b) => a.position - b.position)
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-[9vh] backdrop-blur-[1px]"
-      onMouseDown={e => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="max-h-[80vh] w-full max-w-[600px] overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+    <>
+      {/* 모바일 전용 옅은 backdrop (데스크탑은 in-flow 컬럼이라 리스트를 가리지 않음) */}
+      <div className="fixed inset-0 z-40 bg-black/20 md:hidden" onMouseDown={onClose} />
+      <div className="animate-[panel-in_140ms_ease-out] fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-zinc-200 bg-white shadow-2xl md:static md:z-auto md:w-[440px] md:shrink-0 md:animate-none md:shadow-none dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
           <span className="text-[13px] font-semibold text-zinc-400">태스크</span>
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -85,7 +82,7 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
           </div>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <input
             className="w-full bg-transparent text-[17px] font-semibold outline-none placeholder:text-zinc-400"
             value={title}
@@ -202,6 +199,6 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
           </label>
         </div>
       </div>
-    </div>
+    </>
   )
 }

@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, CheckCircle2, CalendarDays, FolderInput, CloudMoon, Sun, Flag, Inbox, Star } from 'lucide-react'
-import { addDays } from 'date-fns'
+import { Circle, CheckCircle2, CalendarDays, FolderInput, Star } from 'lucide-react'
 import type { Task, ChecklistItem } from '../types'
 import { useStore } from '../store/store'
 import ProjectChip from './ProjectChip'
-import { daysFromToday, fmtDateShort, todayStr, toStr } from '../lib/dates'
+import PlanPopover from './PlanPopover'
+import { daysFromToday, fmtDateShort } from '../lib/dates'
 
 /** GTD 리스트 공용 행: 완료 토글 + 제목 + 칩 + deadline 배지 + hover/키보드 퀵 액션 */
 export default function TaskRow({
   task,
   onOpen,
-  showDate,
   trailing,
 }: {
   task: Task
   onOpen: (id: string) => void
-  showDate?: boolean
   trailing?: React.ReactNode
 }) {
   const toggleDone = useStore(s => s.toggleDone)
@@ -68,13 +66,9 @@ export default function TaskRow({
           )}
         </span>
 
-        <QuickBar task={task} selected={selected} />
-
-        {showDate && task.scheduled_date && (
-          <span className="shrink-0 text-[12.5px] font-medium text-zinc-400">{fmtDateShort(task.scheduled_date)}</span>
-        )}
         {task.deadline && !done && <DeadlineBadge deadline={task.deadline} />}
-        <ProjectChip projectId={task.project_id} workspaceId={task.workspace_id} />
+        <ScheduleChip task={task} selected={selected} />
+        <ProjectControl task={task} selected={selected} />
         {trailing}
       </div>
 
@@ -114,117 +108,94 @@ function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next
   return <div className="mb-1">{render(items, 0)}</div>
 }
 
-/** hover/키보드 선택 시 나타나는 즉시 편집 바: 오늘/내일 + 날짜·프로젝트 팝오버 */
-function QuickBar({ task, selected }: { task: Task; selected?: boolean }) {
-  const updateTask = useStore(s => s.updateTask)
-  const projects = useStore(s => s.projects)
-  const workspaces = useStore(s => s.workspaces)
-  const qf = useStore(s => (s.hoverTaskId === task.id ? s.quickFocus : -1))
-  const [pop, setPop] = useState<null | 'sched' | 'deadline' | 'proj'>(null)
+/** 일정 칩 — 날짜 있으면 상대 라벨(클릭=재일정), Someday면 "Someday", 없으면 hover 시 "Plan". 클릭 → PlanPopover */
+function ScheduleChip({ task, selected }: { task: Task; selected?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const has = !!task.scheduled_date || task.someday
 
-  const qbtn = 'rounded px-1.5 py-0.5 text-[12px] font-semibold text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100'
-  const on = 'bg-zinc-200 dark:bg-zinc-700'
-  // 키보드 → 로 이동한 퀵액션 포커스 링 (Inbox·Today·Scheduled·Someday·Project·Deadline = 0~5)
-  const foc = (i: number) => (qf === i ? ' ring-2 ring-blue-500 ring-inset bg-zinc-200 dark:bg-zinc-700' : '')
+  let content: string
+  let tone: 'overdue' | 'today' | 'future' | 'someday' | 'plan'
+  if (task.scheduled_date) {
+    const d = daysFromToday(task.scheduled_date)
+    content = d === 0 ? '오늘' : d === 1 ? '내일' : fmtDateShort(task.scheduled_date)
+    tone = d < 0 ? 'overdue' : d === 0 ? 'today' : 'future'
+  } else if (task.someday) {
+    content = 'Someday'; tone = 'someday'
+  } else {
+    content = 'Plan'; tone = 'plan'
+  }
+
+  const toneCls = {
+    overdue: 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50',
+    today: 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50',
+    future: 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
+    someday: 'text-violet-500 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/40',
+    plan: 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200',
+  }[tone]
+  // 미설정("Plan")은 hover/선택 시에만 노출
+  const vis = has ? '' : `group-hover:visible ${selected ? 'visible' : 'invisible'}`
 
   return (
-    <span
-      className={`relative flex shrink-0 items-center gap-0.5 group-hover:visible ${selected ? 'visible' : 'invisible'}`}
-      onClick={e => e.stopPropagation()}
-      onMouseLeave={() => setPop(null)}
-    >
-      {/* 0) Inbox로 — 날짜·Someday 해제 (1) */}
-      <button className={`${qbtn}${foc(0)}`} title="Inbox로 — 날짜·Someday 해제 (1)" onClick={() => updateTask(task.id, { scheduled_date: null, someday: false })}>
-        <Inbox size={13} />
+    <span className="relative shrink-0" onClick={e => e.stopPropagation()}>
+      <button
+        className={`flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] font-medium transition-colors ${toneCls} ${vis}`}
+        title="일정 변경"
+        onClick={() => setOpen(o => !o)}
+      >
+        {!has && <CalendarDays size={12} className="shrink-0" />}
+        <span>{content}</span>
       </button>
-      {/* 1) Today (2) */}
-      <button className={`${qbtn}${foc(1)}`} title="오늘로 (2)" onClick={() => updateTask(task.id, { scheduled_date: todayStr() })}>
-        <Sun size={13} />
-      </button>
-      {/* 2) Schedule — 실행일 날짜 (3) */}
-      <button className={`${qbtn} ${pop === 'sched' ? on : ''}${foc(2)}`} title="실행일 날짜 선택 (3)" onClick={() => setPop(pop === 'sched' ? null : 'sched')}>
-        <CalendarDays size={13} />
-      </button>
-      {/* 3) Someday (4) */}
-      <button className={`${qbtn}${foc(3)}`} title={task.someday ? 'Someday 해제 (4)' : 'Someday — 언젠가 (4)'} onClick={() => updateTask(task.id, { someday: !task.someday })}>
-        <CloudMoon size={13} className={task.someday ? 'text-violet-500 dark:text-violet-400' : ''} />
-      </button>
-      {/* 4) 프로젝트 선택 (5) */}
-      <button className={`${qbtn} ${pop === 'proj' ? on : ''}${foc(4)}`} title="프로젝트 선택 (5)" onClick={() => setPop(pop === 'proj' ? null : 'proj')}>
-        <FolderInput size={13} />
-      </button>
-      {/* 5) Deadline — 마감일 (6) */}
-      <button className={`${qbtn} ${pop === 'deadline' ? on : ''} ${task.deadline ? 'text-red-500 dark:text-red-400' : ''}${foc(5)}`} title="마감일 (6)" onClick={() => setPop(pop === 'deadline' ? null : 'deadline')}>
-        <Flag size={13} />
-      </button>
-
-      {pop === 'sched' && (
-        <DatePop
-          label="실행일"
-          value={task.scheduled_date}
-          quick
-          onPick={d => { updateTask(task.id, { scheduled_date: d }); setPop(null) }}
-        />
-      )}
-      {pop === 'deadline' && (
-        <DatePop
-          label="마감일"
-          value={task.deadline}
-          onPick={d => { updateTask(task.id, { deadline: d }); setPop(null) }}
-        />
-      )}
-      {pop === 'proj' && (
-        <div className="absolute top-6 right-0 z-30 w-[220px] rounded-lg border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-          <select
-            autoFocus
-            className="input !py-1 !text-[13px]"
-            value={task.project_id ?? ''}
-            onChange={e => {
-              const pid = e.target.value || null
-              const proj = pid ? projects.find(p => p.id === pid) : null
-              updateTask(task.id, { project_id: pid, workspace_id: proj?.workspace_id ?? null })
-              setPop(null)
-            }}
-          >
-            <option value="">프로젝트 없음</option>
-            {workspaces.map(w => (
-              <optgroup key={w.id} label={w.name}>
-                {projects.filter(p => p.workspace_id === w.id).map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-      )}
+      {open && <PlanPopover task={task} onClose={() => setOpen(false)} />}
     </span>
   )
 }
 
-function DatePop({ label, value, quick, onPick }: { label: string; value: string | null; quick?: boolean; onPick: (d: string | null) => void }) {
+/** 프로젝트 칩 — 있으면 ProjectChip(클릭=변경), 없으면 hover 시 "프로젝트". 클릭 → 프로젝트 선택 팝오버 */
+function ProjectControl({ task, selected }: { task: Task; selected?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const projects = useStore(s => s.projects)
+  const workspaces = useStore(s => s.workspaces)
+  const updateTask = useStore(s => s.updateTask)
+  const has = !!task.project_id || !!task.workspace_id
+  const vis = has ? '' : `group-hover:visible ${selected ? 'visible' : 'invisible'}`
+
   return (
-    <div className="absolute top-6 right-0 z-30 w-[190px] rounded-lg border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-      <div className="mb-1 px-0.5 text-[11.5px] font-semibold text-zinc-400">{label}</div>
-      {quick && (
-        <div className="mb-1.5 flex flex-wrap gap-1">
-          <button className="btn !px-2 !py-0.5 !text-[12px]" onClick={() => onPick(todayStr())}>오늘</button>
-          <button className="btn !px-2 !py-0.5 !text-[12px]" onClick={() => onPick(toStr(addDays(new Date(), 1)))}>내일</button>
-          <button className="btn !px-2 !py-0.5 !text-[12px]" onClick={() => onPick(toStr(addDays(new Date(), 7)))}>+1주</button>
-        </div>
+    <span className="relative shrink-0" onClick={e => e.stopPropagation()}>
+      <button
+        className={`flex shrink-0 items-center rounded-md ${has ? 'hover:opacity-80' : 'gap-1 px-1.5 py-0.5 text-[12px] font-medium text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200'} ${vis}`}
+        title="프로젝트 변경"
+        onClick={() => setOpen(o => !o)}
+      >
+        {has ? <ProjectChip projectId={task.project_id} workspaceId={task.workspace_id} /> : <><FolderInput size={12} className="shrink-0" />프로젝트</>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
+          <div className="absolute top-7 right-0 z-50 w-[220px] rounded-lg border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+            <select
+              autoFocus
+              className="input !py-1 !text-[13px]"
+              value={task.project_id ?? ''}
+              onChange={e => {
+                const pid = e.target.value || null
+                const proj = pid ? projects.find(p => p.id === pid) : null
+                updateTask(task.id, { project_id: pid, workspace_id: proj?.workspace_id ?? null })
+                setOpen(false)
+              }}
+            >
+              <option value="">프로젝트 없음</option>
+              {workspaces.map(w => (
+                <optgroup key={w.id} label={w.name}>
+                  {projects.filter(p => p.workspace_id === w.id).map(p => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </>
       )}
-      <input
-        type="date"
-        autoFocus
-        className="input !py-1 !text-[13px]"
-        value={value ?? ''}
-        onChange={e => onPick(e.target.value || null)}
-      />
-      {value && (
-        <button className="mt-1 w-full rounded px-2 py-0.5 text-left text-[12px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => onPick(null)}>
-          날짜 지움
-        </button>
-      )}
-    </div>
+    </span>
   )
 }
 

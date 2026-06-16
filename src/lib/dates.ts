@@ -1,6 +1,11 @@
-import { addDays, addMonths, addWeeks, format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { addDays, addMonths, addWeeks, endOfWeek, format, parseISO, startOfWeek, differenceInCalendarDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import type { Recurrence } from '../types'
+
+/* 주 경계(월요일 시작) — Plan 팝업·Upcoming 공용 */
+export function thisWeekEnd(): string { return toStr(endOfWeek(new Date(), { weekStartsOn: 1 })) }
+export function nextWeekStart(): string { return toStr(startOfWeek(addWeeks(new Date(), 1), { weekStartsOn: 1 })) }
+export function nextWeekEnd(): string { return toStr(endOfWeek(addWeeks(new Date(), 1), { weekStartsOn: 1 })) }
 
 export function todayStr(): string {
   return format(new Date(), 'yyyy-MM-dd')

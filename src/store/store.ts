@@ -444,6 +444,11 @@ export const selScheduled = (s: Store) => {
     .sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? '') || a.position - b.position)
 }
 
+/** Upcoming = 날짜 있는 미완료(지연·오늘·미래 전부). 페이지에서 버킷으로 분류 */
+export const selDated = (s: Store) =>
+  s.tasks.filter(t => t.scheduled_date && t.status !== 'done')
+    .sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? '') || a.position - b.position)
+
 /** 프로젝트 진행률 (hold 제외) */
 export function projectStats(s: Store, projectId: string): { done: number; total: number; pct: number } {
   const list = s.tasks.filter(t => t.project_id === projectId && !t.someday) /* 백로그(Someday)는 진행률 제외 */

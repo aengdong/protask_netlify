@@ -13,7 +13,7 @@ import { todayStr } from '../lib/dates'
  *  Alt+1~5 뷰 직접이동 · Alt+Shift+1~9 워크스페이스 · Ctrl+K 캡처 · Ctrl+Z 실행취소 · ? 도움말
  */
 export const SHORTCUTS: { keys: string; desc: string }[] = [
-  { keys: '1~5', desc: '뷰 이동: Inbox·Today·Scheduled·Someday·Calendar' },
+  { keys: '1~5', desc: '뷰 이동: Inbox·Today·Upcoming·Someday·Calendar' },
   { keys: '↑ / ↓', desc: '선택 태스크 이동 / 탭 화면(워크·프로젝트) 항목 선택' },
   { keys: '→', desc: '뷰에서: 할일 입력칸 포커스(Inbox/Today/Someday) · 없으면 첫 태스크' },
   { keys: '↑ / ↓', desc: '할일 입력칸 ↔ 첫 태스크 (↓ 진입 · ↑ 복귀) · Esc 입력 해제' },
@@ -41,8 +41,8 @@ export const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: '?', desc: '단축키 도움말' },
 ]
 
-const VIEW_PATHS = ['/inbox', '/', '/scheduled', '/someday', '/calendar']
-const NAV_BY_DIGIT: Record<string, string> = { '1': '/inbox', '2': '/', '3': '/scheduled', '4': '/someday', '5': '/calendar' }
+const VIEW_PATHS = ['/inbox', '/', '/upcoming', '/someday', '/calendar']
+const NAV_BY_DIGIT: Record<string, string> = { '1': '/inbox', '2': '/', '3': '/upcoming', '4': '/someday', '5': '/calendar' }
 
 function isTyping(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement

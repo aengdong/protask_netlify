@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Inbox, Sun, CalendarDays, CalendarRange, Plus, Settings, Moon, SunMedium, LayoutGrid, CloudMoon, HelpCircle, Folder, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react'
+import { Inbox, Sun, CalendarClock, CalendarRange, Plus, Settings, Moon, SunMedium, LayoutGrid, CloudMoon, HelpCircle, Folder, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   DndContext, PointerSensor, TouchSensor, closestCenter,
@@ -130,7 +130,7 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
   const workspaces = useStore(s => s.workspaces)
   const inboxCount = useStore(s => selInbox(s).length)
   const todayCount = useStore(s => selOverdue(s).length + selToday(s).filter(t => t.status !== 'done').length)
-  const scheduledCount = useStore(s => selScheduled(s).length)
+  const upcomingCount = useStore(s => selOverdue(s).length + selScheduled(s).length)
   const somedayCount = useStore(s => selSomeday(s).length)
   const addWorkspace = useStore(s => s.addWorkspace)
   const navigate = useNavigate()
@@ -170,10 +170,10 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
           Today
           <CountBadge n={todayCount} />
         </NavLink>
-        <NavLink to="/scheduled" className={navCls}>
-          <CalendarDays size={15.5} strokeWidth={1.9} />
-          Scheduled
-          <CountBadge n={scheduledCount} />
+        <NavLink to="/upcoming" className={navCls}>
+          <CalendarClock size={15.5} strokeWidth={1.9} />
+          Upcoming
+          <CountBadge n={upcomingCount} />
         </NavLink>
         <NavLink to="/someday" className={navCls}>
           <CloudMoon size={15.5} strokeWidth={1.9} />

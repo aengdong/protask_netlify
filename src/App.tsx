@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { Inbox, Sun, CalendarDays, LayoutGrid, Settings as SettingsIcon } from 'lucide-react'
 import Sidebar, { useTheme } from './components/Sidebar'
 import QuickCapture from './components/QuickCapture'
@@ -7,7 +7,7 @@ import Shortcuts from './components/Shortcuts'
 import TaskDetail from './components/TaskDetail'
 import TodayPage from './pages/Today'
 import InboxPage from './pages/Inbox'
-import ScheduledPage from './pages/Scheduled'
+import UpcomingPage from './pages/Upcoming'
 import SomedayPage from './pages/Someday'
 import CalendarPage from './pages/Calendar'
 import WorkspacePage from './pages/Workspace'
@@ -68,7 +68,8 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<TodayPage />} />
                 <Route path="/inbox" element={<InboxPage />} />
-                <Route path="/scheduled" element={<ScheduledPage />} />
+                <Route path="/upcoming" element={<UpcomingPage />} />
+                <Route path="/scheduled" element={<Navigate to="/upcoming" replace />} />
                 <Route path="/someday" element={<SomedayPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/workspaces" element={<WorkspaceListPage />} />
@@ -80,12 +81,13 @@ export default function App() {
             </Suspense>
           )}
         </main>
+        {/* 상세 패널 — 데스크탑은 본문 옆 3번째 컬럼(in-flow), 모바일은 전체화면 오버레이 */}
+        {detailTaskId && <TaskDetail key={detailTaskId} taskId={detailTaskId} onClose={() => openDetail(null)} />}
       </div>
       <MobileNav />
       <QuickCapture />
       <Shortcuts />
       <Flash />
-      {detailTaskId && <TaskDetail key={detailTaskId} taskId={detailTaskId} onClose={() => openDetail(null)} />}
     </BrowserRouter>
   )
 }

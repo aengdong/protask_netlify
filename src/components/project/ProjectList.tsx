@@ -49,7 +49,7 @@ export default function ProjectList({ tasks, projectId, wsId }: { tasks: Task[];
             <span className="text-[12.5px] font-bold">{BUCKET_LABEL[g.col]}</span>
             <span className="text-[11.5px] font-semibold text-zinc-400">{g.tasks.length}</span>
           </div>
-          {g.tasks.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} showDate />)}
+          {g.tasks.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
         </section>
       ))}
 
