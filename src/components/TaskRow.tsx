@@ -125,15 +125,16 @@ function ScheduleChip({ task, selected }: { task: Task; selected?: boolean }) {
     content = 'Plan'; tone = 'plan'
   }
 
+  // 모노톤 — 연체만 옅은 빨강으로 신호, 나머지는 중립 zinc
   const toneCls = {
-    overdue: 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50',
-    today: 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50',
+    overdue: 'text-red-400 hover:bg-zinc-100 dark:text-red-400/90 dark:hover:bg-zinc-800',
+    today: 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
     future: 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
-    someday: 'text-violet-500 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/40',
+    someday: 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
     plan: 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200',
   }[tone]
-  // 미설정("Plan")은 hover/선택 시에만 노출
-  const vis = has ? '' : `group-hover:visible ${selected ? 'visible' : 'invisible'}`
+  // 날짜·Someday·Plan 모두 hover/선택 시에만 노출
+  const vis = `group-hover:visible ${selected ? 'visible' : 'invisible'}`
 
   return (
     <span className="relative shrink-0" onClick={e => e.stopPropagation()}>

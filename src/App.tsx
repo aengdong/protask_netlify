@@ -81,13 +81,13 @@ export default function App() {
             </Suspense>
           )}
         </main>
-        {/* 상세 패널 — 데스크탑은 본문 옆 3번째 컬럼(in-flow), 모바일은 전체화면 오버레이 */}
-        {detailTaskId && <TaskDetail key={detailTaskId} taskId={detailTaskId} onClose={() => openDetail(null)} />}
       </div>
       <MobileNav />
       <QuickCapture />
       <Shortcuts />
       <Flash />
+      {/* 상세 — 데스크탑은 우측에 작은 팝업, 모바일은 전체화면 */}
+      {detailTaskId && <TaskDetail key={detailTaskId} taskId={detailTaskId} onClose={() => openDetail(null)} />}
     </BrowserRouter>
   )
 }

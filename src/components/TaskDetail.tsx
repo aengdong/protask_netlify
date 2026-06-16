@@ -51,9 +51,9 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
 
   return (
     <>
-      {/* 모바일 전용 옅은 backdrop (데스크탑은 in-flow 컬럼이라 리스트를 가리지 않음) */}
+      {/* 모바일 전용 옅은 backdrop (데스크탑은 우측 작은 팝업이라 리스트 위에 살짝 뜸) */}
       <div className="fixed inset-0 z-40 bg-black/20 md:hidden" onMouseDown={onClose} />
-      <div className="animate-[panel-in_140ms_ease-out] fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-zinc-200 bg-white shadow-2xl md:static md:z-auto md:w-[440px] md:shrink-0 md:animate-none md:shadow-none dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="animate-[panel-in_140ms_ease-out] fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-2xl md:inset-auto md:top-[68px] md:right-3 md:max-h-[80vh] md:w-[420px] md:rounded-xl md:border md:border-zinc-200 dark:bg-zinc-900 md:dark:border-zinc-700">
         <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
           <span className="text-[13px] font-semibold text-zinc-400">태스크</span>
           <div className="ml-auto flex items-center gap-1">

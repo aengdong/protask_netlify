@@ -15,11 +15,14 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* 오른쪽 도킹 패널 슬라이드인 (모바일 오버레이용) */
+/* 상세 팝업 페이드인 (transform 잔류 방지로 opacity만) */
 @keyframes panel-in {
-  from { transform: translateX(24px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
+
+/* 다크모드에서 native date/time 입력의 달력 아이콘이 보이도록 */
+.dark input[type="date"], .dark input[type="time"] { color-scheme: dark; }
 
 /* 미세 스크롤바 */
 * { scrollbar-width: thin; scrollbar-color: rgb(0 0 0 / 0.15) transparent; }

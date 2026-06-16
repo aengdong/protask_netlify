@@ -52,9 +52,8 @@ export default function PlanPopover({ task, onClose, align = 'right' }: { task: 
             onChange={e => apply({ scheduled_date: e.target.value || null, someday: false })}
           />
         </label>
-        <label className="flex items-center gap-2 px-2 py-1 text-[12px] text-zinc-500 dark:text-zinc-400">
+        <label className="flex items-center gap-2 px-2 py-1 text-[12px] text-zinc-500 dark:text-zinc-400" title="마감일">
           <Flag size={13} className={`shrink-0 ${task.deadline ? 'text-red-500' : 'text-zinc-400'}`} />
-          <span className="shrink-0">마감</span>
           <input
             type="date"
             className="w-full bg-transparent text-[12.5px] outline-none"

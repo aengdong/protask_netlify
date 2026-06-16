@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { Folder } from 'lucide-react'
 import { useStore, projectColor } from '../store/store'
 
@@ -12,8 +13,8 @@ export default function ProjectChip({ projectId, workspaceId }: { projectId: str
     const ws = workspaces.find(w => w.id === project.workspace_id)
     return (
       <span
-        className="inline-flex max-w-[150px] items-center rounded-full px-2 py-px text-[12px] font-medium text-white"
-        style={{ background: projectColor(project.id, projects) }}
+        className="inline-flex max-w-[150px] items-center rounded-full bg-[var(--pc)] px-2 py-px text-[12px] font-medium text-white dark:brightness-[0.72] dark:saturate-[0.85]"
+        style={{ '--pc': projectColor(project.id, projects) } as CSSProperties}
         title={ws ? `${ws.name} / ${project.title}` : project.title}
       >
         <span className="truncate">{project.title}</span>
