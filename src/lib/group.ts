@@ -1,7 +1,7 @@
-import { kanbanColOf } from '../store/store'
+import { bucketOf } from '../store/store'
 import {
-  KANBAN_LABEL, KANBAN_ORDER, paletteColor,
-  type KanbanCol, type Phase, type Project, type Task,
+  BUCKET_LABEL, BUCKET_ORDER, paletteColor,
+  type Bucket, type Phase, type Project, type Task,
 } from '../types'
 
 export type GroupBy = 'none' | 'status' | 'label' | 'project' | 'phase' | 'phase-project'
@@ -9,7 +9,7 @@ export type GroupBy = 'none' | 'status' | 'label' | 'project' | 'phase' | 'phase
 export interface TaskGroup {
   key: string
   label: string
-  col?: KanbanCol
+  col?: Bucket
   /** label 그룹일 때 그 라벨 (add 시 부여) */
   label_value?: string
   /** project 그룹일 때 프로젝트 id (null=미분류). add 시 부여 */
@@ -28,7 +28,7 @@ export function collectLabels(tasks: Task[]): string[] {
   return [...set].sort((a, b) => a.localeCompare(b))
 }
 
-/** 그룹화 — status는 KANBAN_ORDER 순, label은 라벨별, project는 프로젝트별(+미분류), none은 단일 */
+/** 그룹화 — status는 BUCKET_ORDER(미분류·오늘·예정·언젠가·완료) 순, label은 라벨별, project는 프로젝트별(+미분류), none은 단일 */
 export function groupTasks(tasks: Task[], groupBy: GroupBy, projects: Project[] = [], phases: Phase[] = []): TaskGroup[] {
   if (groupBy === 'phase') {
     const projPhase = new Map(projects.map(p => [p.id, p.phase_id]))
@@ -50,11 +50,11 @@ export function groupTasks(tasks: Task[], groupBy: GroupBy, projects: Project[] 
     return groups
   }
   if (groupBy === 'status') {
-    return KANBAN_ORDER.map(col => ({
+    return BUCKET_ORDER.map(col => ({
       key: col,
-      label: KANBAN_LABEL[col],
+      label: BUCKET_LABEL[col],
       col,
-      tasks: tasks.filter(t => kanbanColOf(t) === col).sort(byPos),
+      tasks: tasks.filter(t => bucketOf(t) === col).sort(byPos),
     }))
   }
   if (groupBy === 'label') {

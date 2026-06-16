@@ -16,21 +16,24 @@ export const PROJECT_STATUS_DOT: Record<ProjectStatus, string> = {
 }
 
 /**
- * 칸반 컬럼은 별도 상태가 아니라 GTD 상태의 파생 투영:
- * backlog = Someday / doing = 실행일 ≤ 오늘 / todo = 그외 미완료 / done = 완료
+ * 버킷은 별도 상태가 아니라 GTD 상태(status·someday·scheduled_date)의 파생 투영:
+ * inbox = 날짜 X · someday X / today = 실행일 ≤ 오늘(연체 포함) / scheduled = 실행일 미래
+ * someday = 언젠가 / done = 완료
  */
-export type KanbanCol = 'backlog' | 'todo' | 'doing' | 'done'
-export const KANBAN_ORDER: KanbanCol[] = ['backlog', 'todo', 'doing', 'done']
-export const KANBAN_LABEL: Record<KanbanCol, string> = {
-  backlog: '백로그',
-  todo: '시작전',
-  doing: '진행중',
+export type Bucket = 'inbox' | 'today' | 'scheduled' | 'someday' | 'done'
+export const BUCKET_ORDER: Bucket[] = ['inbox', 'today', 'scheduled', 'someday', 'done']
+export const BUCKET_LABEL: Record<Bucket, string> = {
+  inbox: '미분류',
+  today: '오늘',
+  scheduled: '예정',
+  someday: '언젠가',
   done: '완료',
 }
-export const KANBAN_DOT: Record<KanbanCol, string> = {
-  backlog: 'bg-violet-400',
-  todo: 'bg-zinc-400',
-  doing: 'bg-amber-400',
+export const BUCKET_DOT: Record<Bucket, string> = {
+  inbox: 'bg-zinc-400',
+  today: 'bg-blue-500',
+  scheduled: 'bg-indigo-500',
+  someday: 'bg-violet-400',
   done: 'bg-emerald-500',
 }
 
@@ -107,11 +110,6 @@ export interface WorkspaceCanvas {
   workspace_id: string
   scene: Record<string, unknown>
   notes: string
-}
-
-export const STATUS_LABEL: Record<TaskStatus, string> = {
-  todo: '시작전',
-  done: '완료',
 }
 
 /* 워크스페이스 식별 색 — 사용자 지정 color 우선, 없으면 팔레트에서 인덱스로 결정 */

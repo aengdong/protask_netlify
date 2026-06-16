@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Trash2, X, Repeat, Star } from 'lucide-react'
-import { useStore, kanbanColOf, kanbanPatch } from '../store/store'
-import { KANBAN_LABEL, KANBAN_ORDER, type KanbanCol, type Recurrence } from '../types'
+import { useStore, bucketOf, bucketPatch } from '../store/store'
+import { BUCKET_LABEL, BUCKET_ORDER, type Bucket, type Recurrence } from '../types'
 import { todayStr, toStr } from '../lib/dates'
 import { addDays } from 'date-fns'
 import Checklist from './Checklist'
@@ -119,15 +119,15 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[12.5px] font-semibold text-zinc-400">상태</span>
+              <span className="mb-1 block text-[12.5px] font-semibold text-zinc-400">구분</span>
               <select
                 className="input"
-                value={kanbanColOf(task)}
-                onChange={e => updateTask(task.id, kanbanPatch(e.target.value as KanbanCol))}
+                value={bucketOf(task)}
+                onChange={e => updateTask(task.id, bucketPatch(e.target.value as Bucket))}
               >
-                {KANBAN_ORDER.map(c => <option key={c} value={c}>{KANBAN_LABEL[c]}</option>)}
+                {BUCKET_ORDER.map(c => <option key={c} value={c}>{BUCKET_LABEL[c]}</option>)}
               </select>
-              <span className="mt-1 block px-0.5 text-[12px] text-zinc-400">진행중 = 실행일 오늘 · 백로그 = Someday</span>
+              <span className="mt-1 block px-0.5 text-[12px] text-zinc-400">오늘 = 실행일 오늘·연체 · 예정 = 실행일 미래 · 언젠가 = Someday</span>
             </label>
 
             <label className="block">

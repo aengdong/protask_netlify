@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { CalendarDays, Columns3, Filter, PanelsTopLeft, Table2, Trash2 } from 'lucide-react'
-import { useStore, projectStats, kanbanPatch, useViewTabs } from '../store/store'
+import { useStore, projectStats, bucketPatch, useViewTabs } from '../store/store'
 import { wsColor, WS_PALETTE, PROJECT_STATUS_LABEL, PROJECT_STATUS_ORDER, PROJECT_STATUS_DOT, type ProjectStatus } from '../types'
 import type { GroupBy, TaskGroup } from '../lib/group'
 import WorkspaceBoard from '../components/workspace/WorkspaceBoard'
@@ -66,11 +66,11 @@ export default function WorkspacePage() {
   const showGroup = view === 'table'
   const showFilter = view !== 'overview'
 
-  // 태스크 추가 (테이블 그룹별): 프로젝트 그룹→project_id, 상태→kanbanPatch, 라벨→labels
+  // 태스크 추가 (테이블 그룹별): 프로젝트 그룹→project_id, 구분→bucketPatch, 라벨→labels
   const wsOnAdd = (title: string, g: TaskGroup) => {
     const base = { title, workspace_id: ws.id }
     if (g.project_id) addTask({ ...base, project_id: g.project_id })
-    else if (g.col) addTask({ ...base, ...kanbanPatch(g.col) })
+    else if (g.col) addTask({ ...base, ...bucketPatch(g.col) })
     else if (g.label_value) addTask({ ...base, labels: [g.label_value] })
     else addTask(base)
   }
@@ -126,7 +126,7 @@ export default function WorkspacePage() {
               <option value="phase-project">Phase · 프로젝트</option>
               <option value="phase">Phase</option>
               <option value="project">프로젝트</option>
-              <option value="status">상태</option>
+              <option value="status">구분</option>
               <option value="label">라벨</option>
               <option value="none">없음</option>
             </select>

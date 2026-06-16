@@ -3,10 +3,11 @@ import { create } from 'zustand'
 import { customAlphabet } from 'nanoid'
 import { supabase } from '../lib/supabase'
 import { enqueue, pendingCount } from '../lib/sync'
-import { nextOccurrence, todayStr } from '../lib/dates'
+import { addDays } from 'date-fns'
+import { nextOccurrence, todayStr, toStr } from '../lib/dates'
 import { GAP } from '../lib/position'
-import type { ChecklistItem, KanbanCol, Phase, Project, Section, Task, Workspace } from '../types'
-import { KANBAN_ORDER, paletteColor } from '../types'
+import type { Bucket, ChecklistItem, Phase, Project, Section, Task, Workspace } from '../types'
+import { paletteColor } from '../types'
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 12)
 export const nid = (p: string) => `${p}_${nanoid()}`
@@ -71,8 +72,6 @@ interface Store {
   updateTask: (id: string, patch: Partial<Task>) => void
   deleteTask: (id: string) => void
   toggleDone: (id: string) => void
-  /** 상태점 클릭: 파생 칸반 컬럼 순환 (백로그→시작전→진행중→완료) */
-  cycleStatus: (id: string) => void
   /** 마지막 태스크 변경 취소. 취소한 작업 설명 또는 null */
   undo: () => string | null
   /** 칸반/Today 리스트 리밸런스: ids 순서대로 position 컬럼 재배치 */
@@ -376,13 +375,6 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  cycleStatus: id => {
-    const t = get().tasks.find(x => x.id === id)
-    if (!t) return
-    const next = KANBAN_ORDER[(KANBAN_ORDER.indexOf(kanbanColOf(t)) + 1) % KANBAN_ORDER.length]
-    get().updateTask(id, kanbanPatch(next))
-  },
-
   rebalance: (ids, field) => {
     const updates = ids.map((id, i) => ({ id, pos: (i + 1) * GAP }))
     set(s => ({
@@ -399,23 +391,26 @@ function resetCk(c: ChecklistItem): ChecklistItem {
   return { id: nid('ck'), title: c.title, done: false, children: c.children.map(resetCk) }
 }
 
-/* ───── 파생 칸반 (컬럼 = GTD 상태의 투영) ───── */
-export function kanbanColOf(t: Task, today = todayStr()): KanbanCol {
+/* ───── 파생 버킷 (= GTD 상태의 투영) ───── */
+export function bucketOf(t: Task, today = todayStr()): Bucket {
   if (t.status === 'done') return 'done'
-  if (t.someday) return 'backlog'
-  if (t.scheduled_date && t.scheduled_date <= today) return 'doing'
-  return 'todo'
+  if (t.someday) return 'someday'
+  if (!t.scheduled_date) return 'inbox'
+  if (t.scheduled_date <= today) return 'today' // 오늘·연체 포함
+  return 'scheduled'
 }
 
-/** 컬럼으로 이동시킬 때 적용할 패치 */
-export function kanbanPatch(col: KanbanCol): Partial<Task> {
-  switch (col) {
-    case 'backlog':
-      return { status: 'todo', someday: true, scheduled_date: null, today_section: null, today_position: null, completed_at: null }
-    case 'todo':
+/** 버킷으로 이동시킬 때 적용할 패치 */
+export function bucketPatch(b: Bucket): Partial<Task> {
+  switch (b) {
+    case 'inbox':
       return { status: 'todo', someday: false, scheduled_date: null, today_section: null, today_position: null, completed_at: null }
-    case 'doing':
+    case 'today':
       return { status: 'todo', someday: false, scheduled_date: todayStr(), completed_at: null }
+    case 'scheduled':
+      return { status: 'todo', someday: false, scheduled_date: toStr(addDays(new Date(), 1)), completed_at: null } // 기본 내일
+    case 'someday':
+      return { status: 'todo', someday: true, scheduled_date: null, today_section: null, today_position: null, completed_at: null }
     case 'done':
       return { status: 'done', completed_at: nowISO() }
   }

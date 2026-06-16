@@ -1,23 +1,25 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
-import { ArrowLeft, CalendarDays, Columns3, Filter, Table2 } from 'lucide-react'
-import { useStore, projectStats, visibleDone, kanbanColOf, kanbanPatch, useViewTabs } from '../store/store'
-import { KANBAN_LABEL, KANBAN_ORDER, type KanbanCol } from '../types'
+import { ArrowLeft, CalendarDays, Columns3, Filter, List, Table2 } from 'lucide-react'
+import { useStore, projectStats, visibleDone, bucketOf, bucketPatch, useViewTabs } from '../store/store'
+import { BUCKET_LABEL, BUCKET_ORDER, type Bucket } from '../types'
 import { collectLabels, type GroupBy, type TaskGroup } from '../lib/group'
+import ProjectList from '../components/project/ProjectList'
 import ProjectTable from '../components/project/ProjectTable'
 import ProjectBoard from '../components/project/ProjectBoard'
 import ProjectCalendar from '../components/project/ProjectCalendar'
 
-type View = 'table' | 'board' | 'calendar'
-interface FilterState { showDone: boolean; labels: string[]; cols: KanbanCol[] }
+type View = 'list' | 'table' | 'board' | 'calendar'
+interface FilterState { showDone: boolean; labels: string[]; cols: Bucket[] }
 
 const VIEW_TABS: { key: View; label: string; icon: typeof Table2 }[] = [
+  { key: 'list', label: '리스트', icon: List },
   { key: 'table', label: '테이블', icon: Table2 },
   { key: 'board', label: '보드', icon: Columns3 },
   { key: 'calendar', label: '캘린더', icon: CalendarDays },
 ]
-const VIEW_KEYS: View[] = ['table', 'board', 'calendar']
+const VIEW_KEYS: View[] = ['list', 'table', 'board', 'calendar']
 
 export default function ProjectPage() {
   const { wsId, projectId } = useParams<{ wsId: string; projectId: string }>()
@@ -29,7 +31,7 @@ export default function ProjectPage() {
 
   const [view, setView] = useState<View>(() => {
     const v = localStorage.getItem('pd-projview') as View
-    return VIEW_KEYS.includes(v) ? v : 'table'
+    return VIEW_KEYS.includes(v) ? v : 'list'
   })
   const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem('pd-projgroup') as GroupBy) || 'status')
   const [filter, setFilter] = useState<FilterState>({ showDone: true, labels: [], cols: [] })
@@ -48,7 +50,7 @@ export default function ProjectPage() {
   const filtered = useMemo(
     () => projectTasks.filter(t => {
       if (!filter.showDone && t.status === 'done') return false
-      if (filter.cols.length && !filter.cols.includes(kanbanColOf(t))) return false
+      if (filter.cols.length && !filter.cols.includes(bucketOf(t))) return false
       if (filter.labels.length && !filter.labels.some(l => t.labels.includes(l))) return false
       return true
     }),
@@ -59,7 +61,7 @@ export default function ProjectPage() {
 
   const onAddInGroup = (title: string, g: TaskGroup) => {
     const base = { title, project_id: project.id, workspace_id: ws.id }
-    if (g.col) addTask({ ...base, ...kanbanPatch(g.col) })
+    if (g.col) addTask({ ...base, ...bucketPatch(g.col) })
     else if (g.label_value) addTask({ ...base, labels: [g.label_value] })
     else addTask(base)
   }
@@ -101,7 +103,7 @@ export default function ProjectPage() {
           <label className="flex items-center gap-1.5 text-[13px] text-zinc-500 dark:text-zinc-400">
             그룹화
             <select className="input !h-7 !w-auto !py-0 !text-[13px]" value={groupBy} onChange={e => setGroupP(e.target.value as GroupBy)}>
-              <option value="status">상태</option>
+              <option value="status">구분</option>
               <option value="label">라벨</option>
               <option value="none">없음</option>
             </select>
@@ -121,14 +123,14 @@ export default function ProjectPage() {
                   완료 항목 표시
                 </label>
                 <div className="mt-2.5 border-t border-zinc-100 pt-2 dark:border-zinc-800">
-                  <p className="mb-1 text-[12px] font-bold text-zinc-400">상태</p>
+                  <p className="mb-1 text-[12px] font-bold text-zinc-400">구분</p>
                   <div className="flex flex-wrap gap-1">
-                    {KANBAN_ORDER.map(c => {
+                    {BUCKET_ORDER.map(c => {
                       const on = filter.cols.includes(c)
                       return (
                         <button key={c} onClick={() => setFilter(f => ({ ...f, cols: on ? f.cols.filter(x => x !== c) : [...f.cols, c] }))}
                           className={`rounded-full border px-2 py-px text-[12px] font-medium ${on ? 'border-blue-400 bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400' : 'border-zinc-200 text-zinc-500 dark:border-zinc-700'}`}>
-                          {KANBAN_LABEL[c]}
+                          {BUCKET_LABEL[c]}
                         </button>
                       )
                     })}
@@ -163,6 +165,7 @@ export default function ProjectPage() {
 
       {/* 뷰 본문 */}
       <div className="min-h-0 flex-1 overflow-y-auto pt-3">
+        {view === 'list' && <ProjectList tasks={filtered} projectId={project.id} wsId={ws.id} />}
         {view === 'table' && <ProjectTable tasks={filtered} groupBy={groupBy} onAdd={onAddInGroup} />}
         {view === 'board' && <ProjectBoard tasks={filtered} projectId={project.id} wsId={ws.id} />}
         {view === 'calendar' && <ProjectCalendar tasks={filtered} />}

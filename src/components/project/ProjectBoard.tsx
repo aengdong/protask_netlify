@@ -5,9 +5,9 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus } from 'lucide-react'
-import { useStore, visibleDone, kanbanColOf, kanbanPatch, useNavOrder } from '../../store/store'
-import { KANBAN_DOT, KANBAN_LABEL, KANBAN_ORDER, type KanbanCol, type Task } from '../../types'
+import { Check, Plus } from 'lucide-react'
+import { useStore, visibleDone, bucketOf, bucketPatch, useNavOrder } from '../../store/store'
+import { BUCKET_DOT, BUCKET_LABEL, BUCKET_ORDER, type Bucket, type Task } from '../../types'
 import { between } from '../../lib/position'
 import { countCk } from '../../lib/group'
 import { DeadlineBadge } from '../TaskRow'
@@ -32,17 +32,17 @@ export default function ProjectBoard({ tasks, projectId, wsId }: { tasks: Task[]
   }, [])
 
   const byCol = useMemo(() => {
-    const map = {} as Record<KanbanCol, Task[]>
-    for (const c of KANBAN_ORDER) map[c] = []
+    const map = {} as Record<Bucket, Task[]>
+    for (const c of BUCKET_ORDER) map[c] = []
     for (const t of tasks) {
       if (!visibleDone(t)) continue
-      map[kanbanColOf(t)].push(t)
+      map[bucketOf(t)].push(t)
     }
-    for (const c of KANBAN_ORDER) map[c].sort((a, b) => a.position - b.position)
+    for (const c of BUCKET_ORDER) map[c].sort((a, b) => a.position - b.position)
     return map
   }, [tasks])
 
-  useNavOrder(useMemo(() => KANBAN_ORDER.flatMap(c => byCol[c].map(t => t.id)), [byCol]), 'task')
+  useNavOrder(useMemo(() => BUCKET_ORDER.flatMap(c => byCol[c].map(t => t.id)), [byCol]), 'task')
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
@@ -53,19 +53,19 @@ export default function ProjectBoard({ tasks, projectId, wsId }: { tasks: Task[]
     if (!task) return
 
     const overId = String(over.id)
-    const fromCol = kanbanColOf(task)
-    let targetCol: KanbanCol
+    const fromCol = bucketOf(task)
+    let targetCol: Bucket
     let ids: string[]
     let insertAt: number
 
     if (overId.startsWith('col:')) {
-      targetCol = overId.slice(4) as KanbanCol
+      targetCol = overId.slice(4) as Bucket
       ids = byCol[targetCol].map(t => t.id).filter(id => id !== taskId)
       insertAt = ids.length
     } else {
       const overTask = tasks.find(t => t.id === overId)
       if (!overTask) return
-      targetCol = kanbanColOf(overTask)
+      targetCol = bucketOf(overTask)
       const col = byCol[targetCol]
       const origIdx = col.findIndex(t => t.id === taskId)
       const overIdx = col.findIndex(t => t.id === overId)
@@ -86,7 +86,7 @@ export default function ProjectBoard({ tasks, projectId, wsId }: { tasks: Task[]
     const nextPos = nextId ? tasks.find(t => t.id === nextId)?.position : undefined
     const pos = between(prevPos, nextPos)
 
-    const colPatch: Partial<Task> = fromCol !== targetCol ? kanbanPatch(targetCol) : {}
+    const colPatch: Partial<Task> = fromCol !== targetCol ? bucketPatch(targetCol) : {}
 
     if (Number.isNaN(pos)) {
       updateTask(taskId, colPatch)
@@ -101,8 +101,8 @@ export default function ProjectBoard({ tasks, projectId, wsId }: { tasks: Task[]
   return (
     <DndContext sensors={sensors} collisionDetection={collision} autoScroll={false} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
       <div className="flex h-full snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-5 md:snap-none">
-        {KANBAN_ORDER.map(c => (
-          <Column key={c} col={c} tasks={byCol[c]} onOpen={openDetail} onAdd={title => addTask({ title, project_id: projectId, workspace_id: wsId, ...kanbanPatch(c) })} />
+        {BUCKET_ORDER.map(c => (
+          <Column key={c} col={c} tasks={byCol[c]} onOpen={openDetail} onAdd={title => addTask({ title, project_id: projectId, workspace_id: wsId, ...bucketPatch(c) })} />
         ))}
       </div>
       <DragOverlay>{activeTask ? <CardBody task={activeTask} overlay /> : null}</DragOverlay>
@@ -110,7 +110,7 @@ export default function ProjectBoard({ tasks, projectId, wsId }: { tasks: Task[]
   )
 }
 
-function Column({ col, tasks, onOpen, onAdd }: { col: KanbanCol; tasks: Task[]; onOpen: (id: string) => void; onAdd: (title: string) => void }) {
+function Column({ col, tasks, onOpen, onAdd }: { col: Bucket; tasks: Task[]; onOpen: (id: string) => void; onAdd: (title: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${col}` })
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
@@ -130,8 +130,8 @@ function Column({ col, tasks, onOpen, onAdd }: { col: KanbanCol; tasks: Task[]; 
       }`}
     >
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-        <span className={`h-2 w-2 rounded-full ${KANBAN_DOT[col]}`} />
-        <span className="text-[13.5px] font-bold">{KANBAN_LABEL[col]}</span>
+        <span className={`h-2 w-2 rounded-full ${BUCKET_DOT[col]}`} />
+        <span className="text-[13.5px] font-bold">{BUCKET_LABEL[col]}</span>
         <span className="text-[12.5px] font-semibold text-zinc-400">{tasks.length}</span>
         <button className="ml-auto rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800" onClick={() => setAdding(true)} title="태스크 추가">
           <Plus size={14} />
@@ -179,7 +179,7 @@ function SortableCard({ task, onOpen }: { task: Task; onOpen: (id: string) => vo
 }
 
 function CardBody({ task, overlay, selected }: { task: Task; overlay?: boolean; selected?: boolean }) {
-  const cycleStatus = useStore(s => s.cycleStatus)
+  const toggleDone = useStore(s => s.toggleDone)
   const done = task.status === 'done'
   const ckTotal = countCk(task.checklist)
   const ckDone = countCk(task.checklist, true)
@@ -191,11 +191,13 @@ function CardBody({ task, overlay, selected }: { task: Task; overlay?: boolean; 
     >
       <div className="flex items-start gap-2">
         <button
-          className={`mt-[3px] h-3 w-3 shrink-0 rounded-full ${KANBAN_DOT[kanbanColOf(task)]} transition-transform hover:scale-125`}
-          title={`${KANBAN_LABEL[kanbanColOf(task)]} — 클릭하여 다음 단계로`}
-          onClick={e => { e.stopPropagation(); cycleStatus(task.id) }}
+          className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-zinc-300 text-transparent hover:border-emerald-500 dark:border-zinc-600'}`}
+          title="완료 토글"
+          onClick={e => { e.stopPropagation(); toggleDone(task.id) }}
           onPointerDown={e => e.stopPropagation()}
-        />
+        >
+          <Check size={11} strokeWidth={3} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className={`text-[13.5px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden">

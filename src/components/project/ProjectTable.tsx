@@ -6,8 +6,8 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
-import { useStore, kanbanColOf, kanbanPatch, useNavOrder } from '../../store/store'
-import { KANBAN_DOT, KANBAN_LABEL, type KanbanCol, type Task } from '../../types'
+import { useStore, bucketOf, bucketPatch, useNavOrder } from '../../store/store'
+import { BUCKET_DOT, BUCKET_LABEL, type Bucket, type Task } from '../../types'
 import { fmtDateShort } from '../../lib/dates'
 import { between } from '../../lib/position'
 import { groupTasks, countCk, type GroupBy, type TaskGroup } from '../../lib/group'
@@ -27,7 +27,6 @@ export default function ProjectTable({
   const gridCls = 'grid-cols-[24px_1fr_88px_84px_110px]'
   const openDetail = useStore(s => s.openDetail)
   const toggleDone = useStore(s => s.toggleDone)
-  const cycleStatus = useStore(s => s.cycleStatus)
   const updateTask = useStore(s => s.updateTask)
   const rebalance = useStore(s => s.rebalance)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -86,9 +85,9 @@ export default function ProjectTable({
       insertAt = origIdx !== -1 && origIdx < overIdx ? overPos + 1 : overPos
     }
 
-    // 그룹 이동 패치: 상태 그룹→kanbanPatch, 라벨 그룹→labels, 프로젝트 그룹→project_id
+    // 그룹 이동 패치: 구분 그룹→bucketPatch, 라벨 그룹→labels, 프로젝트 그룹→project_id
     let patch: Partial<Task> = {}
-    if (groupBy === 'status' && group.col && kanbanColOf(task) !== group.col) patch = kanbanPatch(group.col)
+    if (groupBy === 'status' && group.col && bucketOf(task) !== group.col) patch = bucketPatch(group.col)
     else if (groupBy === 'label' && group.label_value && !task.labels.includes(group.label_value)) patch = { labels: [group.label_value] }
     else if ((groupBy === 'project' || groupBy === 'phase-project') && group.project_id !== undefined && task.project_id !== group.project_id) patch = { project_id: group.project_id }
 
@@ -116,7 +115,7 @@ export default function ProjectTable({
   return (
     <div className="mx-auto max-w-[1000px] px-5 pb-8">
       <div className={`sticky top-0 z-20 grid ${gridCls} items-center gap-2 border-b border-zinc-200 bg-white px-2 py-1.5 text-[12px] font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950`}>
-        <span /><span>제목</span><span>상태</span><span>실행일</span><span>마감일</span>
+        <span /><span>제목</span><span>구분</span><span>실행일</span><span>마감일</span>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={collision} autoScroll={false} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
@@ -140,7 +139,6 @@ export default function ProjectTable({
                         onToggle={() => setCollapsed(c => ({ ...c, [child.key]: !c[child.key] }))}
                         onOpen={openDetail}
                         onToggleDone={toggleDone}
-                        onCycle={cycleStatus}
                         onAdd={title => onAdd(title, child)}
                       />
                     ))}
@@ -158,7 +156,6 @@ export default function ProjectTable({
                 onToggle={() => setCollapsed(c => ({ ...c, [g.key]: !c[g.key] }))}
                 onOpen={openDetail}
                 onToggleDone={toggleDone}
-                onCycle={cycleStatus}
                 onAdd={title => onAdd(title, g)}
               />
             ))}
@@ -175,7 +172,7 @@ export default function ProjectTable({
   )
 }
 
-function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onToggleDone, onCycle, onAdd }: {
+function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onToggleDone, onAdd }: {
   group: TaskGroup
   groupBy: GroupBy
   gridCls: string
@@ -183,7 +180,6 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
   onToggle: () => void
   onOpen: (id: string) => void
   onToggleDone: (id: string) => void
-  onCycle: (id: string) => void
   onAdd: (title: string) => void
 }) {
   const [text, setText] = useState('')
@@ -197,7 +193,7 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
       {showHeader && (
         <button className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-left" onClick={onToggle}>
           {collapsed ? <ChevronRight size={13} className="text-zinc-400" /> : <ChevronDown size={13} className="text-zinc-400" />}
-          {group.col && <span className={`h-2 w-2 rounded-full ${KANBAN_DOT[group.col]}`} />}
+          {group.col && <span className={`h-2 w-2 rounded-full ${BUCKET_DOT[group.col]}`} />}
           <span className="text-[13.5px] font-bold">{group.label}</span>
           <span className="text-[12px] font-semibold text-zinc-400">{group.tasks.length}</span>
         </button>
@@ -206,7 +202,7 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
       {!collapsed && (
         <div ref={setNodeRef}>
           <SortableContext items={group.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-            {group.tasks.map(t => <Row key={t.id} task={t} gridCls={gridCls} onOpen={onOpen} onToggleDone={onToggleDone} onCycle={onCycle} />)}
+            {group.tasks.map(t => <Row key={t.id} task={t} gridCls={gridCls} onOpen={onOpen} onToggleDone={onToggleDone} />)}
           </SortableContext>
           <div className="grid grid-cols-[24px_1fr] items-center gap-2 px-2 py-1">
             <Plus size={13} className="text-zinc-300" />
@@ -225,17 +221,16 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
   )
 }
 
-function Row({ task, gridCls, onOpen, onToggleDone, onCycle }: {
+function Row({ task, gridCls, onOpen, onToggleDone }: {
   task: Task
   gridCls: string
   onOpen: (id: string) => void
   onToggleDone: (id: string) => void
-  onCycle: (id: string) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const selected = useStore(s => s.hoverTaskId === task.id)
   const done = task.status === 'done'
-  const col = kanbanColOf(task)
+  const col = bucketOf(task)
   const ckTotal = countCk(task.checklist)
   const ckDone = countCk(task.checklist, true)
   return (
@@ -266,10 +261,10 @@ function Row({ task, gridCls, onOpen, onToggleDone, onCycle }: {
         ))}
       </button>
 
-      <button className="flex items-center gap-1.5 text-left" title={`${KANBAN_LABEL[col]} — 클릭하여 다음 단계로`} onClick={e => { e.stopPropagation(); onCycle(task.id) }} onPointerDown={e => e.stopPropagation()}>
-        <span className={`h-2 w-2 shrink-0 rounded-full ${KANBAN_DOT[col as KanbanCol]}`} />
-        <span className="text-[12.5px] text-zinc-500 dark:text-zinc-400">{KANBAN_LABEL[col]}</span>
-      </button>
+      <span className="flex items-center gap-1.5" title={BUCKET_LABEL[col]}>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${BUCKET_DOT[col as Bucket]}`} />
+        <span className="text-[12.5px] text-zinc-500 dark:text-zinc-400">{BUCKET_LABEL[col]}</span>
+      </span>
 
       <span className="text-[12.5px] text-zinc-500 dark:text-zinc-400">{task.scheduled_date ? fmtDateShort(task.scheduled_date) : ''}</span>
 

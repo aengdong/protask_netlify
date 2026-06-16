@@ -12,7 +12,7 @@ import ProjectChip from '../ProjectChip'
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
 
-/** 워크스페이스 월간 캘린더 — 상위 Calendar와 동일 디자인(시작전/백로그 + 프로젝트 태그), 칩은 프로젝트색 */
+/** 워크스페이스 월간 캘린더 — 상위 Calendar와 동일 디자인(미분류/언젠가 + 프로젝트 태그), 칩은 프로젝트색 */
 export default function WorkspaceCalendar({ tasks, projects }: { tasks: Task[]; projects: Project[] }) {
   const updateTask = useStore(s => s.updateTask)
   const openDetail = useStore(s => s.openDetail)
@@ -148,23 +148,23 @@ function CalChip({ task, color, onOpen }: { task: Task; color: string; onOpen: (
   )
 }
 
-/* ───── 사이드 패널 (시작전 + 백로그) — 상위 Calendar와 동일 ───── */
+/* ───── 사이드 패널 (미분류 + 언젠가) — 상위 Calendar와 동일 ───── */
 function SidePanel({ todo, backlog, backlogOpen, onToggleBacklog, onOpen }: {
   todo: Task[]; backlog: Task[]; backlogOpen: boolean; onToggleBacklog: () => void; onOpen: (id: string) => void
 }) {
   return (
     <aside className="hidden w-[300px] shrink-0 flex-col gap-2 overflow-y-auto md:flex">
-      <PanelSection dropId="panel:todo" icon={<CircleDashed size={14} className="text-zinc-400" />} title="시작전" tasks={todo} emptyText="시작전 태스크 없음" onOpen={onOpen} />
+      <PanelSection dropId="panel:todo" icon={<CircleDashed size={14} className="text-zinc-400" />} title="미분류" tasks={todo} emptyText="미분류 태스크 없음" onOpen={onOpen} />
       {backlogOpen ? (
-        <PanelSection dropId="panel:backlog" icon={<Moon size={14} className="text-violet-400" />} title="백로그" tasks={backlog} emptyText="백로그 비었음" onOpen={onOpen} onCollapse={onToggleBacklog} />
+        <PanelSection dropId="panel:backlog" icon={<Moon size={14} className="text-violet-400" />} title="언젠가" tasks={backlog} emptyText="언젠가 비었음" onOpen={onOpen} onCollapse={onToggleBacklog} />
       ) : (
         <button
           onClick={onToggleBacklog}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 hover:border-violet-300 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-violet-700"
-          title="백로그 열기"
+          title="언젠가 열기"
         >
           <Moon size={14} className="text-violet-400" />
-          <span className="text-[13.5px] font-bold">백로그</span>
+          <span className="text-[13.5px] font-bold">언젠가</span>
           <span className="text-[12px] font-semibold text-zinc-400">{backlog.length}</span>
           <ChevronRight size={14} className="ml-auto text-zinc-400" />
         </button>

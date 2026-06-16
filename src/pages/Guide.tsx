@@ -54,21 +54,22 @@ export default function GuidePage() {
         </p>
       </Section>
 
-      <Section title="칸반 ↔ GTD는 자동으로 연결됩니다">
-        <p className="mb-2">프로젝트의 칸반 4컬럼은 별도 상태가 아니라 <b>태스크의 날짜·Someday에서 자동으로 파생</b>됩니다.
-          그래서 한쪽에서 바꾸면 다른 쪽도 즉시 일치합니다. (태스크의 실제 상태값은 <b>시작전 / 완료</b> 둘뿐)</p>
+      <Section title="구분(버킷) ↔ GTD는 자동으로 연결됩니다">
+        <p className="mb-2">프로젝트의 5가지 <b>구분</b>은 별도 상태가 아니라 <b>태스크의 날짜·Someday에서 자동으로 파생</b>됩니다.
+          그래서 한쪽에서 바꾸면 다른 쪽도 즉시 일치합니다. (태스크의 실제 상태값은 <b>미완료 / 완료</b> 둘뿐)</p>
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr className="border-b border-zinc-200 text-left text-zinc-400 dark:border-zinc-700">
-              <th className="py-1.5 pr-3 font-semibold">칸반 컬럼</th>
+              <th className="py-1.5 pr-3 font-semibold">구분</th>
               <th className="py-1.5 font-semibold">조건 (= GTD 상태)</th>
             </tr>
           </thead>
           <tbody>
             {[
-              ['백로그', 'Someday(언젠가)로 보류한 태스크'],
-              ['시작전', '미완료 · 실행일 없음'],
-              ['진행중', '미완료 · 실행일이 오늘 이하 (= Today/지연)'],
+              ['미분류', '미완료 · 실행일 없음 · Someday 아님 (= Inbox)'],
+              ['오늘', '미완료 · 실행일이 오늘 이하(연체 포함)'],
+              ['예정', '미완료 · 실행일이 미래 (예: 내일 계획한 일)'],
+              ['언젠가', 'Someday(언젠가)로 보류한 태스크'],
               ['완료', '완료된 태스크'],
             ].map(([c, d]) => (
               <tr key={c} className="border-b border-zinc-100 dark:border-zinc-800/70">
@@ -79,7 +80,7 @@ export default function GuidePage() {
           </tbody>
         </table>
         <p className="mt-2 text-[13.5px] text-zinc-500 dark:text-zinc-400">
-          예: 칸반에서 태스크를 “진행중”으로 끌면 실행일이 오늘로 잡혀 Today에 나타나고, Inbox에서 Someday로 보내면 그 프로젝트 칸반의 백로그에 들어갑니다.
+          예: 보드에서 태스크를 “오늘”로 끌면 실행일이 오늘로 잡혀 Today에 나타나고, “언젠가”로 보내면 Someday에 들어갑니다. 날짜를 비우면 다시 “미분류”(Inbox)가 됩니다.
         </p>
       </Section>
 
