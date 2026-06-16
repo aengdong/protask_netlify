@@ -4,6 +4,7 @@ import { useStore, bucketOf, bucketPatch } from '../store/store'
 import { BUCKET_LABEL, BUCKET_ORDER, type Bucket, type Recurrence } from '../types'
 import { todayStr, toStr } from '../lib/dates'
 import { addDays } from 'date-fns'
+import { confirmDialog } from '../store/dialogStore'
 import Checklist from './Checklist'
 
 /** 태스크 상세 — 중앙 팝업(다른 태스크 클릭 시 교체) */
@@ -68,8 +69,8 @@ export default function TaskDetail({ taskId, onClose }: { taskId: string; onClos
             <button
               className="rounded p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
               title="삭제"
-              onClick={() => {
-                if (window.confirm(`"${task.title}" 태스크를 삭제할까요?`)) {
+              onClick={async () => {
+                if (await confirmDialog({ title: '태스크 삭제', message: `"${task.title}"를 삭제할까요?`, confirmLabel: '삭제', danger: true })) {
                   deleteTask(task.id)
                   onClose()
                 }

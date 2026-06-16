@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Plus } from 'lucide-react'
 import { useStore, projectStats } from '../store/store'
+import { promptDialog } from '../store/dialogStore'
 import { wsColor } from '../types'
 
 /** 모바일 하단 탭용 워크스페이스 목록 */
@@ -17,8 +18,8 @@ export default function WorkspaceListPage() {
         <h1 className="text-[19px] font-bold tracking-tight">워크스페이스</h1>
         <button
           className="btn ml-auto"
-          onClick={() => {
-            const name = window.prompt('새 워크스페이스 이름')
+          onClick={async () => {
+            const name = await promptDialog({ title: '새 워크스페이스', placeholder: '워크스페이스 이름', confirmLabel: '만들기' })
             if (name?.trim()) navigate(`/w/${addWorkspace(name.trim())}`)
           }}
         >

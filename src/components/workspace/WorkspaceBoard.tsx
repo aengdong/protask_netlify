@@ -9,6 +9,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, projectStats, useNavOrder } from '../../store/store'
+import { promptDialog, confirmDialog } from '../../store/dialogStore'
 import Modal from '../Modal'
 import { between } from '../../lib/position'
 import type { Project } from '../../types'
@@ -112,10 +113,10 @@ export default function WorkspaceBoard({ wsId, projects }: { wsId: string; proje
             canEdit={ph.id !== null}
             onMoveUp={() => movePhase(idx, -1)}
             onMoveDown={() => movePhase(idx, 1)}
-            onRename={() => { const n = window.prompt('Phase 이름', ph.name); if (n?.trim()) store.updatePhase(ph.id!, { name: n.trim() }) }}
-            onRemove={() => {
+            onRename={async () => { const n = await promptDialog({ title: 'Phase 이름 변경', defaultValue: ph.name, confirmLabel: '변경' }); if (n?.trim()) store.updatePhase(ph.id!, { name: n.trim() }) }}
+            onRemove={async () => {
               const n = projects.filter(p => p.phase_id === ph.id).length
-              if (window.confirm(n ? `Phase "${ph.name}"를 삭제할까요? 프로젝트 ${n}개는 미분류로 이동합니다.` : `Phase "${ph.name}"를 삭제할까요?`)) store.deletePhase(ph.id!)
+              if (await confirmDialog({ title: 'Phase 삭제', message: n ? `"${ph.name}"를 삭제할까요? 프로젝트 ${n}개는 미분류로 이동합니다.` : `"${ph.name}"를 삭제할까요?`, confirmLabel: '삭제', danger: true })) store.deletePhase(ph.id!)
             }}
             onAddProject={() => setProjModal({ project: null, phaseId: ph.id })}
             onEditProject={p => setProjModal({ project: p, phaseId: p.phase_id })}
@@ -123,7 +124,7 @@ export default function WorkspaceBoard({ wsId, projects }: { wsId: string; proje
           />
         ))}
 
-        <button className="btn mt-1" onClick={() => { const n = window.prompt('새 Phase 이름'); if (n?.trim()) store.addPhase(wsId, n.trim()) }}>
+        <button className="btn mt-1" onClick={async () => { const n = await promptDialog({ title: '새 Phase', placeholder: 'Phase 이름', confirmLabel: '추가' }); if (n?.trim()) store.addPhase(wsId, n.trim()) }}>
           <Plus size={14} /> Phase
         </button>
 
@@ -257,9 +258,9 @@ function ProjectModal({ wsId, project, defaultPhaseId, onClose }: { wsId: string
         </label>
         <div className="flex items-center justify-between pt-1">
           {project ? (
-            <button className="btn btn-danger" onClick={() => {
+            <button className="btn btn-danger" onClick={async () => {
               const n = store.tasks.filter(t => t.project_id === project.id).length
-              if (window.confirm(`프로젝트 "${project.title}"와 태스크 ${n}개를 삭제할까요?`)) { store.deleteProject(project.id); onClose() }
+              if (await confirmDialog({ title: '프로젝트 삭제', message: `"${project.title}"와 태스크 ${n}개를 삭제할까요?`, confirmLabel: '삭제', danger: true })) { store.deleteProject(project.id); onClose() }
             }}>
               <Trash2 size={13} /> 삭제
             </button>

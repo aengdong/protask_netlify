@@ -5,6 +5,7 @@ import Sidebar, { useTheme } from './components/Sidebar'
 import QuickCapture from './components/QuickCapture'
 import Shortcuts from './components/Shortcuts'
 import TaskDetail from './components/TaskDetail'
+import DialogHost from './components/DialogHost'
 import TodayPage from './pages/Today'
 import InboxPage from './pages/Inbox'
 import UpcomingPage from './pages/Upcoming'
@@ -88,6 +89,7 @@ export default function App() {
       <Flash />
       {/* 상세 — 중앙 팝업 */}
       {detailTaskId && <TaskDetail key={detailTaskId} taskId={detailTaskId} onClose={() => openDetail(null)} />}
+      <DialogHost />
     </BrowserRouter>
   )
 }

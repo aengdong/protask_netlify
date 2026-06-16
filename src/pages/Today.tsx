@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, selToday, selOverdue, useNavOrder, projectColor } from '../store/store'
+import { promptDialog, confirmDialog } from '../store/dialogStore'
 import { useGcal } from '../store/gcalStore'
 import type { Task } from '../types'
 import { between } from '../lib/position'
@@ -42,7 +43,7 @@ export default function TodayPage() {
   type GroupBy = 'section' | 'wsproject'
   const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem('pd-todaygroup') === 'wsproject' ? 'wsproject' : 'section'))
   const setGroupByP = (g: GroupBy) => { setGroupBy(g); localStorage.setItem('pd-todaygroup', g) }
-  const addSectionPrompt = () => { const name = window.prompt('새 섹션 이름 (예: 아침, 오전, 집중시간)'); if (name?.trim()) addSection(name.trim()) }
+  const addSectionPrompt = async () => { const name = await promptDialog({ title: '새 섹션', placeholder: '예: 아침, 오전, 집중시간', confirmLabel: '추가' }); if (name?.trim()) addSection(name.trim()) }
 
   const submit = () => {
     const v = text.trim()
@@ -516,13 +517,13 @@ function Section({
               <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="아래로" disabled={isLast}
                 onClick={() => moveSection(secKey, 1)}><ChevronDown size={12.5} /></button>
               <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="이름 변경"
-                onClick={() => {
-                  const v = window.prompt('섹션 이름', name)
+                onClick={async () => {
+                  const v = await promptDialog({ title: '섹션 이름 변경', defaultValue: name, confirmLabel: '변경' })
                   if (v?.trim()) renameSection(secKey, v.trim())
                 }}><Pencil size={12} /></button>
               <button className="rounded p-0.5 hover:text-red-600" title="섹션 삭제 (태스크는 미지정으로)"
-                onClick={() => {
-                  if (window.confirm(`섹션 "${name}"을 삭제할까요? 배정된 태스크는 미지정으로 이동합니다.`)) deleteSection(secKey)
+                onClick={async () => {
+                  if (await confirmDialog({ title: '섹션 삭제', message: `"${name}" 섹션을 삭제할까요? 배정된 태스크는 미지정으로 이동합니다.`, confirmLabel: '삭제', danger: true })) deleteSection(secKey)
                 }}><Trash2 size={12} /></button>
             </span>
           )}

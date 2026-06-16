@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { CalendarDays, Columns3, Filter, PanelsTopLeft, Table2, Trash2 } from 'lucide-react'
 import { useStore, projectStats, bucketPatch, useViewTabs } from '../store/store'
+import { promptDialog, confirmDialog } from '../store/dialogStore'
 import { wsColor, WS_PALETTE, PROJECT_STATUS_LABEL, PROJECT_STATUS_ORDER, PROJECT_STATUS_DOT, type ProjectStatus } from '../types'
 import type { GroupBy, TaskGroup } from '../lib/group'
 import WorkspaceBoard from '../components/workspace/WorkspaceBoard'
@@ -98,10 +99,10 @@ export default function WorkspacePage() {
             </>
           )}
         </div>
-        <h1 className="cursor-text text-[19px] font-bold tracking-tight" title="클릭하여 이름 변경" onClick={() => { const n = window.prompt('워크스페이스 이름', ws.name); if (n?.trim()) updateWorkspace(ws.id, { name: n.trim() }) }}>{ws.name}</h1>
+        <h1 className="cursor-text text-[19px] font-bold tracking-tight" title="클릭하여 이름 변경" onClick={async () => { const n = await promptDialog({ title: '워크스페이스 이름 변경', defaultValue: ws.name, confirmLabel: '변경' }); if (n?.trim()) updateWorkspace(ws.id, { name: n.trim() }) }}>{ws.name}</h1>
         <span className="text-[13.5px] font-medium text-zinc-400">{stats.done}/{stats.total} · {pct}%</span>
         <div className="h-1.5 w-40 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${pct}%` }} /></div>
-        <button className="btn btn-danger ml-auto" title="워크스페이스 삭제" onClick={() => { if (window.confirm(`워크스페이스 "${ws.name}"와 모든 프로젝트·태스크를 삭제할까요?`)) { deleteWorkspace(ws.id); navigate('/') } }}>
+        <button className="btn btn-danger ml-auto" title="워크스페이스 삭제" onClick={async () => { if (await confirmDialog({ title: '워크스페이스 삭제', message: `"${ws.name}"와 모든 프로젝트·태스크를 삭제할까요?`, confirmLabel: '삭제', danger: true })) { deleteWorkspace(ws.id); navigate('/') } }}>
           <Trash2 size={14} />
         </button>
       </div>

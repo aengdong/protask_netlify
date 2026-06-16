@@ -10,6 +10,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useStore, selInbox, selToday, selOverdue, selDated, selSomeday, projectColor } from '../store/store'
 import type { Project, Workspace } from '../types'
 import { onSyncStatus, type SyncStatus } from '../lib/sync'
+import { promptDialog } from '../store/dialogStore'
 
 const LS_EXP = 'pd-ws-expanded'
 function loadExpanded(): Set<string> {
@@ -139,8 +140,8 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
 
   useEffect(() => onSyncStatus((s, p) => { setSync(s); setPending(p) }), [])
 
-  const onAddWs = () => {
-    const name = window.prompt('새 워크스페이스 이름')
+  const onAddWs = async () => {
+    const name = await promptDialog({ title: '새 워크스페이스', placeholder: '워크스페이스 이름', confirmLabel: '만들기' })
     if (!name?.trim()) return
     const id = addWorkspace(name.trim())
     navigate(`/w/${id}`)

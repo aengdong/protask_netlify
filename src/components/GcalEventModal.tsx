@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import { useGcal } from '../store/gcalStore'
+import { confirmDialog } from '../store/dialogStore'
 import type { EventTiming, GcalEvent } from '../lib/gcal'
 
 /** YYYY-MM-DD에 n일 (정오 기준으로 tz 경계 회피) */
@@ -95,7 +96,7 @@ export default function GcalEventModal({
 
   const remove = async () => {
     if (!ev) return
-    if (!window.confirm(`"${ev.summary}" 일정을 삭제할까요?`)) return
+    if (!(await confirmDialog({ title: '일정 삭제', message: `"${ev.summary}" 일정을 삭제할까요?`, confirmLabel: '삭제', danger: true }))) return
     setBusy(true)
     const ok = await deleteEvent(ev)
     setBusy(false)
