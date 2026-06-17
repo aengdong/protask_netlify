@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
-import { Inbox, Sun, CalendarDays, LayoutGrid, Settings as SettingsIcon } from 'lucide-react'
-import Sidebar, { useTheme } from './components/Sidebar'
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Inbox, Sun, LayoutGrid, Settings as SettingsIcon, Plus, Menu } from 'lucide-react'
+import Sidebar, { useTheme, MobileDrawer, SyncDot } from './components/Sidebar'
 import QuickCapture from './components/QuickCapture'
 import Shortcuts from './components/Shortcuts'
 import TaskDetail from './components/TaskDetail'
@@ -30,6 +30,7 @@ export default function App() {
   const authReady = useAuth(s => s.ready)
   const hiddenAt = useRef<number | null>(null)
   const authed = !REQUIRE_AUTH || !!session
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     if (!authed) return // 로그인 전에는 데이터를 불러오지 않음(RLS로 어차피 거부됨)
@@ -59,9 +60,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <MobileTopBar onMenu={() => setDrawerOpen(true)} />
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} dark={dark} onToggleTheme={toggle} />
       <div className="flex h-full">
         <Sidebar dark={dark} onToggleTheme={toggle} />
-        <main className="min-w-0 flex-1 overflow-y-auto pb-14 md:pb-0">
+        <main className="min-w-0 flex-1 overflow-y-auto pt-[calc(3rem+env(safe-area-inset-top))] pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0">
           {!loaded ? (
             <div className="flex h-full items-center justify-center text-[14px] text-zinc-400">불러오는 중…</div>
           ) : (
@@ -84,6 +87,7 @@ export default function App() {
         </main>
       </div>
       <MobileNav />
+      <CaptureFab />
       <QuickCapture />
       <Shortcuts />
       <Flash />
@@ -115,16 +119,64 @@ function Flash() {
   )
 }
 
+const STATIC_TITLES: Record<string, string> = {
+  '/': 'Today', '/inbox': 'Inbox', '/upcoming': 'Upcoming', '/someday': 'Someday',
+  '/calendar': 'Calendar', '/workspaces': '워크스페이스', '/settings': '설정', '/guide': '설명서',
+}
+
+/** 모바일 상단 바 — 햄버거(드로어) + 현재 화면 타이틀 + 동기화 점 */
+function MobileTopBar({ onMenu }: { onMenu: () => void }) {
+  const loc = useLocation()
+  const workspaces = useStore(s => s.workspaces)
+  const projects = useStore(s => s.projects)
+
+  let title = STATIC_TITLES[loc.pathname]
+  if (!title) {
+    // /w/:wsId 또는 /w/:wsId/p/:projectId — 엔티티 이름으로
+    const seg = loc.pathname.split('/').filter(Boolean) // ['w', wsId, 'p', pid]
+    if (seg[0] === 'w') {
+      const pid = seg[2] === 'p' ? seg[3] : undefined
+      title = (pid && projects.find(p => p.id === pid)?.title)
+        || workspaces.find(w => w.id === seg[1])?.name
+        || 'Protask'
+    }
+  }
+
+  return (
+    <header className="fixed inset-x-0 top-0 z-30 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className="flex h-12 items-center gap-1.5 px-2">
+        <button onClick={onMenu} aria-label="메뉴" className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+          <Menu size={20} />
+        </button>
+        <span className="truncate text-[15px] font-semibold tracking-tight">{title ?? 'Protask'}</span>
+        <SyncDot className="ml-auto mr-2 shrink-0" />
+      </div>
+    </header>
+  )
+}
+
+/** 모바일 빠른 캡처 FAB — 어느 화면에서나 전역 캡처를 연다(하단 탭 위에 띄움) */
+function CaptureFab() {
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new Event('pd:capture-open'))}
+      aria-label="빠른 캡처"
+      className="fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.875rem)] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 transition-transform active:scale-95 md:hidden dark:bg-blue-600"
+    >
+      <Plus size={26} strokeWidth={2.4} />
+    </button>
+  )
+}
+
 function MobileNav() {
   const cls = ({ isActive }: { isActive: boolean }) =>
     `flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
       isActive ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'
     }`
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-zinc-200 bg-white/95 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
       <NavLink to="/" end className={cls}><Sun size={18} />Today</NavLink>
       <NavLink to="/inbox" className={cls}><Inbox size={18} />Inbox</NavLink>
-      <NavLink to="/calendar" className={cls}><CalendarDays size={18} />Calendar</NavLink>
       <NavLink to="/workspaces" className={cls}><LayoutGrid size={18} />워크스페이스</NavLink>
       <NavLink to="/settings" className={cls}><SettingsIcon size={18} />설정</NavLink>
     </nav>

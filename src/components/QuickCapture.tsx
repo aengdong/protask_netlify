@@ -38,18 +38,21 @@ export default function QuickCapture() {
   const submit = () => {
     if (!parsed.title) return
     addTask({ title: parsed.title, scheduled_date: parsed.date })
+    // 연속 캡처 — 입력창은 열어둔 채 비우고, 추가됨을 토스트로 알림
+    window.dispatchEvent(new CustomEvent('pd:flash', { detail: parsed.date ? `추가됨 · ${fmtDate(parsed.date)}` : '추가됨 · Inbox' }))
     setText('')
+    inputRef.current?.focus()
   }
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/30 p-4 pt-[18vh] backdrop-blur-[1px]"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/30 p-3 pt-[max(8vh,env(safe-area-inset-top))] backdrop-blur-[1px] md:p-4 md:pt-[18vh]"
       onMouseDown={e => {
         if (e.target === e.currentTarget) { setOpen(false); setText('') }
       }}
     >
-      <div className="w-full max-w-[560px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-        <div className="flex items-center gap-2.5 px-4 py-3">
+      <div className="w-full max-w-[560px] animate-[panel-in_140ms_ease-out] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="flex items-center gap-2.5 px-4 py-3.5 md:py-3">
           <Zap size={16} className="shrink-0 text-blue-500" />
           <input
             ref={inputRef}

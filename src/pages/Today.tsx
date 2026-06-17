@@ -181,7 +181,7 @@ export default function TodayPage() {
 
   return (
     <div className={`mx-auto px-5 py-5 ${view === 'board' ? 'max-w-[1200px]' : 'max-w-[820px]'}`}>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="text-[19px] font-bold tracking-tight">Today</h1>
         <span className="text-[13.5px] font-medium text-zinc-400">{fmtDate(todayStr())} · {doneCount}/{todayTasks.length} 완료</span>
 

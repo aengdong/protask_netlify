@@ -34,14 +34,14 @@ export default function TaskRow({
     <div>
       <div
         ref={ref}
-        className={`group flex min-h-[36px] cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 ${
+        className={`group flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60 ${
           selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
         }`}
         onClick={() => onOpen(task.id)}
       >
         {/* 중요 토글 — 중요면 항상 노란 별, 아니면 hover/선택 시 토글 가능 */}
         <button
-          className={`shrink-0 ${task.important ? 'text-amber-500' : 'invisible text-zinc-300 hover:text-amber-500 group-hover:visible dark:text-zinc-600'}`}
+          className={`shrink-0 ${task.important ? 'text-amber-500' : 'invisible text-zinc-300 hover:text-amber-500 group-hover:visible touch:visible dark:text-zinc-600'}`}
           onClick={e => { e.stopPropagation(); updateTask(task.id, { important: !task.important }) }}
           title={task.important ? '중요 해제' : '중요 표시'}
         >
@@ -133,8 +133,8 @@ function ScheduleChip({ task, selected }: { task: Task; selected?: boolean }) {
     someday: 'text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
     plan: 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200',
   }[tone]
-  // 날짜·Someday·Plan 모두 hover/선택 시에만 노출
-  const vis = `group-hover:visible ${selected ? 'visible' : 'invisible'}`
+  // 날짜·Someday·Plan 모두 hover/선택 시에만 노출 (터치 기기에선 항상 노출)
+  const vis = `group-hover:visible touch:visible ${selected ? 'visible' : 'invisible'}`
 
   return (
     <span className="relative shrink-0" onClick={e => e.stopPropagation()}>
@@ -158,7 +158,7 @@ function ProjectControl({ task, selected }: { task: Task; selected?: boolean }) 
   const workspaces = useStore(s => s.workspaces)
   const updateTask = useStore(s => s.updateTask)
   const has = !!task.project_id || !!task.workspace_id
-  const vis = has ? '' : `group-hover:visible ${selected ? 'visible' : 'invisible'}`
+  const vis = has ? '' : `group-hover:visible touch:visible ${selected ? 'visible' : 'invisible'}`
 
   return (
     <span className="relative shrink-0" onClick={e => e.stopPropagation()}>
@@ -172,7 +172,7 @@ function ProjectControl({ task, selected }: { task: Task; selected?: boolean }) 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
-          <div className="absolute top-7 right-0 z-50 max-h-[320px] w-[220px] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="absolute top-7 right-0 z-50 max-h-[320px] w-[220px] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
             <button
               className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!task.project_id ? 'bg-zinc-100 font-semibold dark:bg-zinc-800' : ''}`}
               onClick={() => { updateTask(task.id, { project_id: null, workspace_id: null }); setOpen(false) }}

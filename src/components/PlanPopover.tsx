@@ -30,7 +30,7 @@ export default function PlanPopover({ task, onClose, align = 'right' }: { task: 
   return (
     <>
       <div className="fixed inset-0 z-40" onMouseDown={onClose} />
-      <div className={`absolute top-7 z-50 w-[208px] rounded-lg border border-zinc-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 ${align === 'right' ? 'right-0' : 'left-0'}`}>
+      <div className={`absolute top-7 z-50 w-[208px] max-w-[calc(100vw-1.5rem)] rounded-lg border border-zinc-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 ${align === 'right' ? 'right-0' : 'left-0'}`}>
         {opts.map(o => (
           <button
             key={o.label}

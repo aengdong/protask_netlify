@@ -2,6 +2,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 터치 기기(호버 불가) 전용 변형 — 호버로 가려지던 액션을 폰에서 항상 노출 */
+@custom-variant touch (@media (hover: none));
+
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
   --color-accent: #2563eb;

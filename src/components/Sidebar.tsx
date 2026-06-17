@@ -1,6 +1,6 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { Inbox, Sun, CalendarClock, CalendarRange, Plus, Settings, Moon, SunMedium, LayoutGrid, CloudMoon, HelpCircle, Folder, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Inbox, Sun, CalendarClock, CalendarRange, Plus, Settings, Moon, SunMedium, LayoutGrid, CloudMoon, HelpCircle, Folder, FolderOpen, ChevronRight, ChevronDown, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import {
   DndContext, PointerSensor, TouchSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
@@ -127,7 +127,20 @@ export function useTheme() {
   return { dark, toggle: () => setDark(d => !d) }
 }
 
-export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => void }) {
+/** 동기화 상태 점 — 사이드바 헤더·모바일 상단바 공용 */
+export function SyncDot({ className = '' }: { className?: string }) {
+  const [sync, setSync] = useState<SyncStatus>('idle')
+  const [pending, setPending] = useState(0)
+  useEffect(() => onSyncStatus((s, p) => { setSync(s); setPending(p) }), [])
+  const dot =
+    sync === 'idle' ? 'bg-emerald-500' : sync === 'saving' ? 'bg-amber-400' : sync === 'offline' ? 'bg-zinc-400' : 'bg-red-500'
+  const dotTitle =
+    sync === 'idle' ? '동기화됨' : sync === 'saving' ? `저장 중 (${pending})` : sync === 'offline' ? `오프라인 — 대기 ${pending}건` : `저장 실패 — 재시도 대기 ${pending}건`
+  return <span className={`h-2 w-2 rounded-full ${dot} ${className}`} title={dotTitle} />
+}
+
+/** 사이드바 본문 — 데스크탑 고정 사이드바와 모바일 드로어가 공유 */
+function SidebarContent({ dark, onToggleTheme, onClose }: { dark: boolean; onToggleTheme: () => void; onClose?: () => void }) {
   const workspaces = useStore(s => s.workspaces)
   const inboxCount = useStore(s => selInbox(s).length)
   const todayCount = useStore(s => selOverdue(s).length + selToday(s).filter(t => t.status !== 'done').length)
@@ -135,10 +148,6 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
   const somedayCount = useStore(s => selSomeday(s).length)
   const addWorkspace = useStore(s => s.addWorkspace)
   const navigate = useNavigate()
-  const [sync, setSync] = useState<SyncStatus>('idle')
-  const [pending, setPending] = useState(0)
-
-  useEffect(() => onSyncStatus((s, p) => { setSync(s); setPending(p) }), [])
 
   const onAddWs = async () => {
     const name = await promptDialog({ title: '새 워크스페이스', placeholder: '워크스페이스 이름', confirmLabel: '만들기' })
@@ -147,17 +156,17 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
     navigate(`/w/${id}`)
   }
 
-  const dot =
-    sync === 'idle' ? 'bg-emerald-500' : sync === 'saving' ? 'bg-amber-400' : sync === 'offline' ? 'bg-zinc-400' : 'bg-red-500'
-  const dotTitle =
-    sync === 'idle' ? '동기화됨' : sync === 'saving' ? `저장 중 (${pending})` : sync === 'offline' ? `오프라인 — 대기 ${pending}건` : `저장 실패 — 재시도 대기 ${pending}건`
-
   return (
-    <aside className="hidden h-full w-[228px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-100/60 md:flex dark:border-zinc-800 dark:bg-zinc-900/60">
+    <>
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <img src="/icons/icon-192.png" alt="" className="h-5 w-5 rounded" />
         <span className="text-[14px] font-semibold tracking-tight">Protask</span>
-        <span className={`ml-auto h-2 w-2 rounded-full ${dot}`} title={dotTitle} />
+        <SyncDot className="ml-auto" />
+        {onClose && (
+          <button onClick={onClose} aria-label="닫기" className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <nav className="flex flex-col gap-0.5 px-2.5">
@@ -220,6 +229,43 @@ export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onTogg
           {dark ? <SunMedium size={15.5} /> : <Moon size={15.5} />}
         </button>
       </div>
+    </>
+  )
+}
+
+/** 데스크탑 고정 사이드바 */
+export default function Sidebar({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => void }) {
+  return (
+    <aside className="hidden h-full w-[228px] shrink-0 flex-col border-r border-zinc-200 bg-zinc-100/60 md:flex dark:border-zinc-800 dark:bg-zinc-900/60">
+      <SidebarContent dark={dark} onToggleTheme={onToggleTheme} />
     </aside>
+  )
+}
+
+/** 모바일 드로어 — 햄버거로 여는 사이드바. 라우트 변경·백드롭·Esc로 닫힘 */
+export function MobileDrawer({ open, onClose, dark, onToggleTheme }: { open: boolean; onClose: () => void; dark: boolean; onToggleTheme: () => void }) {
+  const loc = useLocation()
+  const mounted = useRef(false)
+  // 라우트가 바뀌면 닫기(첫 마운트 제외)
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return }
+    onClose()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.pathname])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <div className="absolute inset-0 animate-[panel-in_140ms_ease-out] bg-black/30 backdrop-blur-[1px]" onClick={onClose} />
+      <aside className="absolute inset-y-0 left-0 flex w-[84vw] max-w-[300px] animate-[panel-in_140ms_ease-out] flex-col border-r border-zinc-200 bg-zinc-100 pl-[env(safe-area-inset-left)] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <SidebarContent dark={dark} onToggleTheme={onToggleTheme} onClose={onClose} />
+      </aside>
+    </div>
   )
 }
