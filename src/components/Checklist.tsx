@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import type { ChecklistItem } from '../types'
 import { nid } from '../store/store'
@@ -43,12 +43,20 @@ interface AddState {
 export default function Checklist({
   items,
   onChange,
+  addSignal,
 }: {
   items: ChecklistItem[]
   onChange: (next: ChecklistItem[]) => void
+  /** 값이 바뀔 때마다 새 최상위 서브태스크 입력을 연다(예: 제목에서 Shift+Enter) */
+  addSignal?: number
 }) {
   const [add, setAdd] = useState<AddState | null>(null)
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
+
+  // 외부 신호(Shift+Enter 등)로 최상위 추가 입력 열기 — 초기 0은 무시
+  useEffect(() => {
+    if (addSignal) setAdd({ parentId: null, text: '' })
+  }, [addSignal])
 
   const commitAdd = (keepOpen: boolean) => {
     if (!add) return
@@ -120,18 +128,18 @@ export default function Checklist({
               </span>
             )}
             <button
-              className="invisible rounded p-0.5 text-zinc-400 group-hover:visible hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700"
-              title="하위 항목"
+              className="shrink-0 rounded p-1 text-zinc-300 hover:bg-zinc-200 hover:text-zinc-700 dark:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+              title="하위 항목 추가"
               onClick={() => setAdd({ parentId: c.id, text: '' })}
             >
-              <Plus size={12} />
+              <Plus size={14} />
             </button>
             <button
-              className="invisible rounded p-0.5 text-zinc-400 group-hover:visible hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
+              className="shrink-0 rounded p-1 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950 dark:hover:text-red-400"
               title="삭제"
               onClick={() => onChange(removeFromTree(items, c.id))}
             >
-              <X size={12} />
+              <X size={14} />
             </button>
           </div>
           {add?.parentId === c.id && (
@@ -172,9 +180,9 @@ export default function Checklist({
       {add === null && (
         <button
           onClick={() => setAdd({ parentId: null, text: '' })}
-          className="mt-0.5 flex items-center gap-1 rounded px-1 py-0.5 text-[13px] font-medium text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400"
+          className="mt-1 flex w-full items-center gap-1.5 rounded-md border border-dashed border-zinc-300 px-2 py-1.5 text-[13px] font-medium text-zinc-500 hover:border-blue-400 hover:bg-blue-50/40 hover:text-blue-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-blue-500 dark:hover:bg-blue-950/20 dark:hover:text-blue-400"
         >
-          <Plus size={12} /> 서브태스크
+          <Plus size={14} /> 서브태스크 추가
         </button>
       )}
     </div>
