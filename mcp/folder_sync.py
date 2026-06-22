@@ -44,6 +44,7 @@ MARK_END = "<!--/folder-sync-->"
 ITEM_RE = re.compile(r"^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$")
 H1_RE = re.compile(r"^#\s+(.+?)\s*$")
 DEFAULT_CHECKLISTS = ["TODO.md"]
+DEFAULT_OVERVIEW = "README.md"
 
 
 # ───────────────────────── env ─────────────────────────
@@ -203,9 +204,25 @@ def _render_block(ap, git, file_summaries, done, total):
     return "\n".join(lines)
 
 
-def _write_overview(ws_id, ap, git, file_summaries, done, total):
-    block = _render_block(ap, git, file_summaries, done, total)
-    seg = f"{MARK_START}\n{block}\n{MARK_END}"
+def _read_overview(ap, overview_name):
+    """개요 소스 md 파일 내용(없으면 '')."""
+    if not overview_name:
+        return ""
+    fp = os.path.join(ap, overview_name)
+    if not os.path.isfile(fp):
+        return ""
+    try:
+        with open(fp, encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def _write_overview(ws_id, ap, git, file_summaries, done, total, overview_md=""):
+    status = _render_block(ap, git, file_summaries, done, total)
+    # 개요 소스(md) 본문 + 구분선 + 자동 상태 블록. md가 없으면 상태 블록만.
+    inner = (overview_md + "\n\n---\n\n" + status) if overview_md else status
+    seg = f"{MARK_START}\n{inner}\n{MARK_END}"
     existing = _get(f"workspace_canvas?workspace_id=eq.{ws_id}&select=notes")
     old = (existing[0]["notes"] if existing else "") or ""
     if MARK_START in old and MARK_END in old:
@@ -220,7 +237,7 @@ def _write_overview(ws_id, ap, git, file_summaries, done, total):
 
 # ───────────────────────── sync ─────────────────────────
 
-def sync(path, name=None, checklists=None):
+def sync(path, name=None, checklists=None, overview=DEFAULT_OVERVIEW):
     _need_env()
     ap = os.path.abspath(path)
     if not os.path.isdir(ap):
@@ -282,7 +299,7 @@ def sync(path, name=None, checklists=None):
         total_done += d
         file_summaries.append((pr_title, d, len(items)))
 
-    _write_overview(ws_id, ap, _git_meta(ap), file_summaries, total_done, total_items)
+    _write_overview(ws_id, ap, _git_meta(ap), file_summaries, total_done, total_items, _read_overview(ap, overview))
     return ws_id, total_done, total_items, len(files)
 
 
@@ -330,25 +347,27 @@ def cmd_register(args):
     reg = _load_registry()
     entry = _find(reg, ap)
     checklists = args.checklist or DEFAULT_CHECKLISTS
+    overview = args.overview or DEFAULT_OVERVIEW
     if entry:
         if args.name:
             entry["name"] = args.name
         entry["checklists"] = checklists
+        entry["overview"] = overview
         print(f"· 이미 등록됨 — 설정 갱신: {ap}")
     else:
-        entry = {"path": ap, "name": args.name, "checklists": checklists}
+        entry = {"path": ap, "name": args.name, "checklists": checklists, "overview": overview}
         reg["folders"].append(entry)
         print(f"+ 등록: {ap}")
     _save_registry(reg)
     _install_hook(ap)
-    ws_id, done, total, nfiles = sync(ap, entry.get("name"), checklists)
+    ws_id, done, total, nfiles = sync(ap, entry.get("name"), checklists, overview)
     print(f"  ✓ 동기화 완료: 프로젝트 {ws_id} · 파일 {nfiles} · 태스크 {done}/{total}")
 
 
 def cmd_sync(args):
     reg = _load_registry()
     entry = _find(reg, args.path) or {}
-    ws_id, done, total, nfiles = sync(args.path, entry.get("name"), entry.get("checklists"))
+    ws_id, done, total, nfiles = sync(args.path, entry.get("name"), entry.get("checklists"), entry.get("overview", DEFAULT_OVERVIEW))
     print(f"✓ {os.path.abspath(args.path)}: 태스크 {done}/{total} (파일 {nfiles})")
 
 
@@ -359,7 +378,7 @@ def cmd_sync_all(args):
         return
     for e in reg["folders"]:
         try:
-            _, done, total, nfiles = sync(e["path"], e.get("name"), e.get("checklists"))
+            _, done, total, nfiles = sync(e["path"], e.get("name"), e.get("checklists"), e.get("overview", DEFAULT_OVERVIEW))
             print(f"✓ {e['path']}: {done}/{total} (파일 {nfiles})")
         except Exception as ex:
             print(f"✗ {e['path']}: {ex}")
@@ -394,6 +413,7 @@ def main():
     pr.add_argument("path")
     pr.add_argument("--name", help="프로젝트 표시 이름(기본: 폴더명)")
     pr.add_argument("--checklist", action="append", help="체크리스트 글롭(반복 가능, 기본 TODO.md)")
+    pr.add_argument("--overview", help="개요 노트 소스 md 파일(기본 README.md, 없으면 자동 상태 블록만)")
     pr.set_defaults(func=cmd_register)
 
     ps = sub.add_parser("sync", help="폴더 1개 동기화(훅이 호출)")
