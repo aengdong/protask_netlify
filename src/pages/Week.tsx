@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, closestCorners, pointerWithin,
   useDroppable, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent,
@@ -9,22 +9,29 @@ import { Check, Plus, ChevronLeft, ChevronRight, Inbox as InboxIcon } from 'luci
 import { startOfWeek, addDays, addWeeks, format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useStore, useNavOrder } from '../store/store'
+import { useGcal } from '../store/gcalStore'
 import { toStr, todayStr, fmtDateShort } from '../lib/dates'
 import { between } from '../lib/position'
 import { countCk } from '../lib/group'
 import { DeadlineBadge } from '../components/TaskRow'
 import type { Task } from '../types'
+import type { GcalEvent } from '../lib/gcal'
 
 const BACKLOG = 'backlog'
+const NONE = 'none'
+const dsKey = (date: string, secId: string) => `${date}::${secId}`
 
-/** 주간 플래너 보드 — 요일 7칸 + 백로그(미배정·지연). 드래그로 scheduled_date 배정. 데스크탑 전용.
- *  leading: 헤더 좌측에 끼울 노드(예: Today의 오늘/이번주 탭). 없으면 "주간" 제목 표시. */
+/** 주간 플래너 보드 — 요일 7칸(각 칸: 캘린더 일정 + 시간 섹션별 태스크) + 백로그(미배정·지연).
+ *  드래그로 scheduled_date·today_section 배정. 데스크탑 전용.
+ *  leading: 헤더 좌측 노드(예: Today의 오늘/이번주 탭). 없으면 "주간" 제목. */
 export default function WeekBoard({ leading }: { leading?: ReactNode }) {
   const tasks = useStore(s => s.tasks)
+  const sections = useStore(s => s.sections)
   const updateTask = useStore(s => s.updateTask)
   const addTask = useStore(s => s.addTask)
   const rebalance = useStore(s => s.rebalance)
   const openDetail = useStore(s => s.openDetail)
+  const gcal = useGcal()
   const [weekOffset, setWeekOffset] = useState(0)
   const [activeId, setActiveId] = useState<string | null>(null)
 
@@ -38,45 +45,57 @@ export default function WeekBoard({ leading }: { leading?: ReactNode }) {
   }, [])
 
   const today = todayStr()
-  const days = useMemo(() => {
+  const sortedSections = useMemo(() => [...sections].sort((a, b) => a.position - b.position), [sections])
+  const secIds = useMemo(() => new Set(sortedSections.map(s => s.id)), [sortedSections])
+
+  const { days, weekStart, weekEnd, weekEndExcl } = useMemo(() => {
     const start = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 })
-    return Array.from({ length: 7 }, (_, i) => {
+    const days = Array.from({ length: 7 }, (_, i) => {
       const d = addDays(start, i)
       return { key: toStr(d), label: format(d, 'EEE', { locale: ko }), short: fmtDateShort(toStr(d)) }
     })
+    return { days, weekStart: days[0].key, weekEnd: days[6].key, weekEndExcl: toStr(addDays(start, 7)) }
   }, [weekOffset])
-  const weekStart = days[0].key
-  const weekEnd = days[6].key
 
-  // 컬럼 데이터: backlog(미배정+이번주 이전 지연) + 요일별
-  const { colMap, overdueIds } = useMemo(() => {
+  // 캘린더 일정 로드(연결 시, 표시 주 범위)
+  useEffect(() => { void gcal.init() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (gcal.status === 'connected') void gcal.ensureRange(weekStart, weekEndExcl)
+  }, [gcal.status, weekStart, weekEndExcl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 컬럼 맵: backlog + (요일×섹션). 요일 섹션 내부는 today_position 정렬.
+  const { cols, overdueIds } = useMemo(() => {
     const map: Record<string, Task[]> = { [BACKLOG]: [] }
-    for (const d of days) map[d.key] = []
+    for (const d of days) for (const sid of [NONE, ...sortedSections.map(s => s.id)]) map[dsKey(d.key, sid)] = []
     const overdue: Task[] = []
     const inbox: Task[] = []
     for (const t of tasks) {
       if (t.status === 'done') continue
       if (t.scheduled_date) {
-        if (t.scheduled_date >= weekStart && t.scheduled_date <= weekEnd) map[t.scheduled_date]?.push(t)
-        else if (t.scheduled_date < weekStart) overdue.push(t) // 이번주 이전 지연
-      } else if (!t.someday) {
-        inbox.push(t) // 미배정(Inbox)
-      }
+        if (t.scheduled_date >= weekStart && t.scheduled_date <= weekEnd) {
+          const sid = t.today_section && secIds.has(t.today_section) ? t.today_section : NONE
+          map[dsKey(t.scheduled_date, sid)]?.push(t)
+        } else if (t.scheduled_date < weekStart) overdue.push(t)
+      } else if (!t.someday) inbox.push(t)
     }
-    for (const d of days) map[d.key].sort((a, b) => a.position - b.position)
+    for (const k of Object.keys(map)) {
+      if (k === BACKLOG) continue
+      map[k].sort((a, b) => (a.today_position ?? 1e12) - (b.today_position ?? 1e12) || a.created_at.localeCompare(b.created_at))
+    }
     overdue.sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? ''))
     inbox.sort((a, b) => b.created_at.localeCompare(a.created_at))
     map[BACKLOG] = [...overdue, ...inbox]
-    return { colMap: map, overdueIds: new Set(overdue.map(t => t.id)) }
-  }, [tasks, days, weekStart, weekEnd])
+    return { cols: map, overdueIds: new Set(overdue.map(t => t.id)) }
+  }, [tasks, days, sortedSections, secIds, weekStart, weekEnd])
 
-  useNavOrder(useMemo(
-    () => [...colMap[BACKLOG], ...days.flatMap(d => colMap[d.key])].map(t => t.id),
-    [colMap, days],
-  ))
+  useNavOrder(useMemo(() => {
+    const ids = [...cols[BACKLOG].map(t => t.id)]
+    for (const d of days) for (const sid of [NONE, ...sortedSections.map(s => s.id)]) ids.push(...cols[dsKey(d.key, sid)].map(t => t.id))
+    return ids
+  }, [cols, days, sortedSections]))
 
   const colOf = (id: string): string | null => {
-    for (const key of Object.keys(colMap)) if (colMap[key].some(t => t.id === id)) return key
+    for (const k of Object.keys(cols)) if (cols[k].some(t => t.id === id)) return k
     return null
   }
 
@@ -92,14 +111,15 @@ export default function WeekBoard({ leading }: { leading?: ReactNode }) {
     let targetKey: string
     let ids: string[]
     let insertAt: number
-    if (overId === BACKLOG || overId.startsWith('day:')) {
-      targetKey = overId === BACKLOG ? BACKLOG : overId.slice(4)
-      ids = colMap[targetKey].map(t => t.id).filter(id => id !== taskId)
+    const isZone = overId === BACKLOG || overId.includes('::')
+    if (isZone) {
+      targetKey = overId
+      ids = cols[targetKey].map(t => t.id).filter(id => id !== taskId)
       insertAt = ids.length
     } else {
       targetKey = colOf(overId) ?? ''
       if (!targetKey) return
-      const col = colMap[targetKey]
+      const col = cols[targetKey]
       const origIdx = col.findIndex(t => t.id === taskId)
       const overIdx = col.findIndex(t => t.id === overId)
       ids = col.map(t => t.id).filter(id => id !== taskId)
@@ -108,25 +128,30 @@ export default function WeekBoard({ leading }: { leading?: ReactNode }) {
     }
 
     if (fromKey === targetKey) {
-      const before = colMap[targetKey].map(t => t.id)
+      const before = cols[targetKey].map(t => t.id)
       const after = [...ids.slice(0, insertAt), taskId, ...ids.slice(insertAt)]
       if (before.join() === after.join()) return
     }
 
-    // 컬럼 이동 패치: 요일=그 날짜, 백로그=날짜 해제(Inbox 회수)
-    const datePatch: Partial<Task> =
-      fromKey === targetKey ? {}
-        : targetKey === BACKLOG ? { scheduled_date: null, someday: false }
-          : { scheduled_date: targetKey, someday: false }
+    const field: 'position' | 'today_position' = targetKey === BACKLOG ? 'position' : 'today_position'
+    // 컬럼 이동 패치
+    let datePatch: Partial<Task> = {}
+    if (fromKey !== targetKey) {
+      if (targetKey === BACKLOG) datePatch = { scheduled_date: null, someday: false }
+      else {
+        const [date, secId] = targetKey.split('::')
+        datePatch = { scheduled_date: date, someday: false, today_section: secId === NONE ? null : secId }
+      }
+    }
 
-    const prevPos = ids[insertAt - 1] ? tasks.find(t => t.id === ids[insertAt - 1])?.position : undefined
-    const nextPos = ids[insertAt] ? tasks.find(t => t.id === ids[insertAt])?.position : undefined
+    const prevPos = ids[insertAt - 1] ? tasks.find(t => t.id === ids[insertAt - 1])?.[field] ?? undefined : undefined
+    const nextPos = ids[insertAt] ? tasks.find(t => t.id === ids[insertAt])?.[field] ?? undefined : undefined
     const pos = between(prevPos, nextPos)
     if (Number.isNaN(pos)) {
       updateTask(taskId, datePatch)
-      rebalance([...ids.slice(0, insertAt), taskId, ...ids.slice(insertAt)], 'position')
+      rebalance([...ids.slice(0, insertAt), taskId, ...ids.slice(insertAt)], field)
     } else {
-      updateTask(taskId, { ...datePatch, position: pos })
+      updateTask(taskId, { ...datePatch, [field]: pos })
     }
   }
 
@@ -147,35 +172,20 @@ export default function WeekBoard({ leading }: { leading?: ReactNode }) {
 
       <DndContext sensors={sensors} collisionDetection={collision} autoScroll={false} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
         <div className="flex min-h-0 flex-1 gap-3 px-5 pb-5">
-          <BacklogColumn tasks={colMap[BACKLOG]} overdueIds={overdueIds} onOpen={openDetail} />
+          <BacklogColumn tasks={cols[BACKLOG]} overdueIds={overdueIds} onOpen={openDetail} />
           <div className="grid min-h-0 min-w-0 flex-1 grid-cols-3 grid-rows-2 gap-3">
             {days.slice(0, 5).map(d => (
-              <DayColumn
-                key={d.key}
-                date={d.key}
-                label={d.label}
-                short={d.short}
-                isToday={d.key === today}
-                isPast={d.key < today}
-                tasks={colMap[d.key]}
-                onOpen={openDetail}
-                onAdd={title => addTask({ title, scheduled_date: d.key })}
-              />
+              <DayColumn key={d.key} date={d.key} label={d.label} short={d.short}
+                isToday={d.key === today} isPast={d.key < today}
+                sections={sortedSections} cols={cols} events={gcal.eventsOn(d.key)}
+                onOpen={openDetail} onAdd={title => addTask({ title, scheduled_date: d.key })} />
             ))}
-            {/* 토·일은 마지막 한 칸에 위아래 반반 */}
             <div className="grid min-h-0 grid-rows-2 gap-3">
               {days.slice(5).map(d => (
-                <DayColumn
-                  key={d.key}
-                  date={d.key}
-                  label={d.label}
-                  short={d.short}
-                  isToday={d.key === today}
-                  isPast={d.key < today}
-                  tasks={colMap[d.key]}
-                  onOpen={openDetail}
-                  onAdd={title => addTask({ title, scheduled_date: d.key })}
-                />
+                <DayColumn key={d.key} date={d.key} label={d.label} short={d.short}
+                  isToday={d.key === today} isPast={d.key < today}
+                  sections={sortedSections} cols={cols} events={gcal.eventsOn(d.key)}
+                  onOpen={openDetail} onAdd={title => addTask({ title, scheduled_date: d.key })} />
               ))}
             </div>
           </div>
@@ -207,45 +217,76 @@ function BacklogColumn({ tasks, overdueIds, onOpen }: { tasks: Task[]; overdueId
   )
 }
 
-function DayColumn({ date, label, short, isToday, isPast, tasks, onOpen, onAdd }: {
+function DayColumn({ date, label, short, isToday, isPast, sections, cols, events, onOpen, onAdd }: {
   date: string; label: string; short: string; isToday: boolean; isPast: boolean
-  tasks: Task[]; onOpen: (id: string) => void; onAdd: (title: string) => void
+  sections: { id: string; name: string }[]
+  cols: Record<string, Task[]>
+  events: GcalEvent[]
+  onOpen: (id: string) => void; onAdd: (title: string) => void
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `day:${date}` })
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
   const commit = (keep: boolean) => { const v = text.trim(); if (v) onAdd(v); setText(''); if (!keep) setAdding(false) }
+  const count = [NONE, ...sections.map(s => s.id)].reduce((n, sid) => n + (cols[dsKey(date, sid)]?.length ?? 0), 0)
   return (
     <div
-      ref={setNodeRef}
       className={`flex h-full min-h-0 min-w-0 flex-col rounded-lg border ${
         isToday ? 'border-blue-300 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20'
-          : isOver ? 'border-blue-400 bg-zinc-100/70 dark:border-blue-600 dark:bg-zinc-900/70'
-            : 'border-zinc-200 bg-zinc-100/70 dark:border-zinc-800 dark:bg-zinc-900/70'
+          : 'border-zinc-200 bg-zinc-100/70 dark:border-zinc-800 dark:bg-zinc-900/70'
       } ${isPast ? 'opacity-70' : ''}`}
     >
       <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
         <span className={`text-[13.5px] font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{label}</span>
         <span className="text-[12px] font-medium text-zinc-400">{short}</span>
-        <span className="text-[12.5px] font-semibold text-zinc-400">{tasks.length || ''}</span>
+        <span className="text-[12.5px] font-semibold text-zinc-400">{count || ''}</span>
         <button className="ml-auto rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800" onClick={() => setAdding(true)} title="태스크 추가"><Plus size={14} /></button>
       </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+        {events.length > 0 && (
+          <div className="mb-0.5 flex flex-col gap-px rounded-md bg-white/60 px-1 py-1 dark:bg-zinc-800/40">
+            {events.map(ev => <EventRow key={ev.id} ev={ev} />)}
+          </div>
+        )}
+        <SectionZone date={date} secId={NONE} tasks={cols[dsKey(date, NONE)] ?? []} onOpen={onOpen} />
+        {adding && (
+          <input
+            autoFocus
+            className="input !text-[13px]"
+            placeholder="태스크 입력 후 Enter"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commit(true); if (e.key === 'Escape') { setText(''); setAdding(false) } }}
+            onBlur={() => commit(false)}
+          />
+        )}
+        {sections.map(s => (
+          <SectionZone key={s.id} date={date} secId={s.id} label={s.name} tasks={cols[dsKey(date, s.id)] ?? []} onOpen={onOpen} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SectionZone({ date, secId, label, tasks, onOpen }: { date: string; secId: string; label?: string; tasks: Task[]; onOpen: (id: string) => void }) {
+  const { setNodeRef, isOver } = useDroppable({ id: dsKey(date, secId) })
+  return (
+    <div ref={setNodeRef} className={`rounded-md ${isOver ? 'bg-blue-100/50 dark:bg-blue-950/30' : ''}`}>
+      {label && <div className="px-1 pt-1 pb-0.5 text-[11px] font-semibold tracking-wide text-zinc-400">{label}</div>}
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2">
+        <div className="flex min-h-[8px] flex-col gap-1.5">
           {tasks.map(t => <SortableCard key={t.id} task={t} onOpen={onOpen} />)}
-          {adding && (
-            <input
-              autoFocus
-              className="input !text-[13.5px]"
-              placeholder="태스크 입력 후 Enter"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') commit(true); if (e.key === 'Escape') { setText(''); setAdding(false) } }}
-              onBlur={() => commit(false)}
-            />
-          )}
         </div>
       </SortableContext>
+    </div>
+  )
+}
+
+function EventRow({ ev }: { ev: GcalEvent }) {
+  return (
+    <div className="flex items-center gap-1.5 px-1 py-0.5 text-[11.5px] text-zinc-500 dark:text-zinc-400" title={ev.summary}>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-[2px]" style={{ background: ev.color ?? '#3b82f6' }} />
+      <span className="shrink-0 tabular-nums">{ev.allDay ? '종일' : ev.start.slice(11, 16)}</span>
+      <span className="truncate">{ev.summary}</span>
     </div>
   )
 }
@@ -275,7 +316,7 @@ function CardBody({ task, overlay, selected, overdue }: { task: Task; overlay?: 
   const ckDone = countCk(task.checklist, true)
   return (
     <div
-      className={`cursor-pointer rounded-md border bg-white p-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-blue-400 dark:bg-zinc-800/90 dark:hover:border-blue-600 ${
+      className={`cursor-pointer rounded-md border bg-white p-2 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-blue-400 dark:bg-zinc-800/90 dark:hover:border-blue-600 ${
         overlay ? 'rotate-1 shadow-lg' : ''
       } ${done ? 'opacity-60' : ''} ${selected ? 'border-blue-400 ring-2 ring-blue-500/50 dark:border-blue-600' : 'border-zinc-200 dark:border-zinc-700'}`}
     >
@@ -289,7 +330,7 @@ function CardBody({ task, overlay, selected, overdue }: { task: Task; overlay?: 
           <Check size={11} strokeWidth={3} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className={`text-[13.5px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>
+          <div className={`text-[13px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden">
             {overdue && task.scheduled_date && (
               <span className="rounded-full bg-red-50 px-1.5 py-px text-[11px] font-semibold text-red-600 dark:bg-red-950 dark:text-red-400">지연 {fmtDateShort(task.scheduled_date)}</span>
