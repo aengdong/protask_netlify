@@ -134,8 +134,10 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   fetchAll: async () => {
-    // outbox에 미전송 변경이 있으면 refetch가 낙관적 상태를 덮으므로 건너뜀
-    if (pendingCount() > 0) return
+    // 이미 로드된 뒤의 refetch만 가드: outbox에 미전송 변경이 있으면 낙관적 상태를 덮으므로 건너뜀.
+    // 최초 부팅은 스토어가 비어 있어 덮어쓸 게 없으므로, 보류 op가 막혀 있어도 반드시 진행해야 한다
+    // (안 그러면 실패가 반복되는 op 하나가 앱 부팅을 영구히 막아 "불러오는 중…"에서 멈춘다).
+    if (get().loaded && pendingCount() > 0) return
     const cutoff = new Date(Date.now() - 30 * 86400_000).toISOString()
     const [ws, ph, pr, tk, sc] = await Promise.all([
       supabase.from('workspaces').select('*').order('position'),
