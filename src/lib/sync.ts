@@ -22,6 +22,7 @@ let queue: Op[] = loadQueue()
 let flushing = false
 let inFlight: Op | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
+let failStreak = 0
 const listeners = new Set<(s: SyncStatus, pending: number) => void>()
 
 function loadQueue(): Op[] {
@@ -103,16 +104,22 @@ export async function flush(): Promise<void> {
     if (ok) {
       queue.shift()
       saveQueue()
+      failStreak = 0
     } else {
       // 보존 + 나중 재시도. 실패 시 refetch 금지(로컬 의도 보존).
       flushing = false
       notify(navigator.onLine ? 'error' : 'offline')
+      // 지수 백오프(30초→…→최대 5분). 영구 실패 op(예: 세션 만료 401)이 서버를 난타하지 않게.
+      // 진짜 복구는 이벤트로 즉시 일어난다: online / 재로그인(authStore에서 flush) / 새 enqueue / 동기화점 클릭.
+      failStreak = Math.min(failStreak + 1, 6)
+      const delay = Math.min(30_000 * 2 ** (failStreak - 1), 5 * 60_000)
       if (retryTimer) clearTimeout(retryTimer)
-      retryTimer = setTimeout(() => void flush(), 30_000)
+      retryTimer = setTimeout(() => void flush(), delay)
       return
     }
   }
   flushing = false
+  failStreak = 0
   notify('idle')
 }
 
@@ -120,6 +127,13 @@ export function pendingCount(): number {
   return queue.length
 }
 
-window.addEventListener('online', () => void flush())
+/** 멈춘 큐를 즉시 재시도 (재로그인·온라인 복귀·동기화점 클릭 시). 백오프 타이머·실패 카운트 리셋. */
+export function retryNow(): void {
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  failStreak = 0
+  void flush()
+}
+
+window.addEventListener('online', () => retryNow())
 // 부팅 시 잔여 큐 flush
 void flush()

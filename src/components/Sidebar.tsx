@@ -3,7 +3,7 @@ import { Inbox, Sun, CalendarClock, CalendarRange, Plus, Settings, Moon, SunMedi
 import { useEffect, useRef, useState } from 'react'
 import { useStore, selInbox, selToday, selOverdue, selDated, selSomeday } from '../store/store'
 import { wsColor, type Workspace } from '../types'
-import { onSyncStatus, type SyncStatus } from '../lib/sync'
+import { onSyncStatus, retryNow, type SyncStatus } from '../lib/sync'
 import { promptDialog } from '../store/dialogStore'
 
 /** 사이드바 프로젝트 행 (최상위) — 클릭=프로젝트 뷰. 서브프로젝트는 프로젝트 뷰 안에서만 다룬다. */
@@ -55,8 +55,23 @@ export function SyncDot({ className = '' }: { className?: string }) {
   useEffect(() => onSyncStatus((s, p) => { setSync(s); setPending(p) }), [])
   const dot =
     sync === 'idle' ? 'bg-emerald-500' : sync === 'saving' ? 'bg-amber-400' : sync === 'offline' ? 'bg-zinc-400' : 'bg-red-500'
+  const stuck = sync === 'error' || sync === 'offline'
   const dotTitle =
-    sync === 'idle' ? '동기화됨' : sync === 'saving' ? `저장 중 (${pending})` : sync === 'offline' ? `오프라인 — 대기 ${pending}건` : `저장 실패 — 재시도 대기 ${pending}건`
+    sync === 'idle' ? '동기화됨'
+    : sync === 'saving' ? `저장 중 (${pending})`
+    : sync === 'offline' ? `오프라인 — 대기 ${pending}건 · 클릭하면 지금 재시도`
+    : `저장 실패 — 대기 ${pending}건 · 클릭하면 지금 재시도(안 되면 재로그인)`
+  if (stuck) {
+    return (
+      <button
+        type="button"
+        onClick={() => retryNow()}
+        title={dotTitle}
+        aria-label={dotTitle}
+        className={`h-2 w-2 shrink-0 rounded-full ${dot} ${className}`}
+      />
+    )
+  }
   return <span className={`h-2 w-2 rounded-full ${dot} ${className}`} title={dotTitle} />
 }
 
