@@ -68,6 +68,17 @@ export const removeFolder = (id: string) => tx('readwrite', s => s.delete(id))
 
 /* ───────────────────────── helpers ───────────────────────── */
 
+/** supabase-js는 쓰기 실패 시 throw하지 않고 { error }를 돌려준다 → 명시적으로 검사해 의미 있는 에러로 던진다. */
+function chk(res: { error: unknown }): void {
+  const e = res.error as { message?: string; code?: string } | null
+  if (!e) return
+  const msg = e.message || ''
+  if (e.code === '42501' || e.code === 'PGRST301' || /jwt|auth|permission|row-level security|not authorized|unauthorized/i.test(msg)) {
+    throw new Error('보드에 쓸 권한이 없습니다 — 로그인 상태(또는 세션 만료)를 확인하세요. 로그인하지 않은 로컬 dev 서버는 RLS로 쓰기가 차단됩니다(읽기만 됨).')
+  }
+  throw new Error(`동기화 쓰기 실패: ${msg || '알 수 없는 오류'}`)
+}
+
 async function sha1hex12(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s))
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
@@ -136,8 +147,8 @@ async function writeOverview(
   const status = lines.join('\n')
   const inner = ovText && ovText.trim() ? `${ovText.trim()}\n\n---\n\n${status}` : status
   const seg = `${MARK_START}\n${inner}\n${MARK_END}`
-  const { data } = await supabase.from('workspace_canvas').select('notes').eq('workspace_id', wsId).maybeSingle()
-  const old = (data?.notes as string) || ''
+  const ovRes = await supabase.from('workspace_canvas').select('notes').eq('workspace_id', wsId).maybeSingle()
+  const old = (ovRes.data?.notes as string) || ''
   let next: string
   if (old.includes(MARK_START) && old.includes(MARK_END)) {
     next = old.replace(new RegExp(`${escapeRe(MARK_START)}[\\s\\S]*?${escapeRe(MARK_END)}`), () => seg)
@@ -147,14 +158,14 @@ async function writeOverview(
     next = seg
   }
   // notes만 upsert → 기존 scene(엑스칼리드로우) 보존
-  await supabase.from('workspace_canvas').upsert({ workspace_id: wsId, notes: next })
+  chk(await supabase.from('workspace_canvas').upsert({ workspace_id: wsId, notes: next }))
 }
 
 /** 폴더 1개 동기화. 보드에 반영 후 스토어 refetch. 반환: 진척 요약 */
 export async function syncFolder(meta: FolderMeta): Promise<{ done: number; total: number; files: number }> {
   await ensurePermission(meta.handle)
   const wsId = meta.id
-  await supabase.from('workspaces').upsert({ id: wsId, name: meta.name })
+  chk(await supabase.from('workspaces').upsert({ id: wsId, name: meta.name }))
 
   let totalItems = 0
   let totalDone = 0
@@ -166,10 +177,11 @@ export async function syncFolder(meta: FolderMeta): Promise<{ done: number; tota
     if (text == null) continue
     const { title, items } = parseChecklist(text)
     const prId = `pr_${await sha1hex12(wsId + SEP + rel)}`
-    await supabase.from('projects').upsert({ id: prId, workspace_id: wsId, title: title || rel })
+    chk(await supabase.from('projects').upsert({ id: prId, workspace_id: wsId, title: title || rel }))
 
-    const { data: existing } = await supabase.from('tasks').select('id,status,completed_at').eq('project_id', prId)
-    const exMap = new Map((existing ?? []).map((t: { id: string; status: string; completed_at: string | null }) => [t.id, t]))
+    const exRes = await supabase.from('tasks').select('id,status,completed_at').eq('project_id', prId)
+    chk(exRes)
+    const exMap = new Map((exRes.data ?? []).map((t: { id: string; status: string; completed_at: string | null }) => [t.id, t]))
 
     const seen = new Map<string, number>()
     const curIds = new Set<string>()
@@ -185,9 +197,9 @@ export async function syncFolder(meta: FolderMeta): Promise<{ done: number; tota
       const completed = it.done ? (prev && prev.status === 'done' && prev.completed_at ? prev.completed_at : new Date().toISOString()) : null
       rows.push({ id: tid, workspace_id: wsId, project_id: prId, title: it.text, status: it.done ? 'done' : 'todo', position: (i + 1) * GAP, completed_at: completed })
     }
-    if (rows.length) await supabase.from('tasks').upsert(rows)
+    if (rows.length) chk(await supabase.from('tasks').upsert(rows))
     const stale = [...exMap.keys()].filter(id => !curIds.has(id))
-    if (stale.length) await supabase.from('tasks').delete().in('id', stale)
+    if (stale.length) chk(await supabase.from('tasks').delete().in('id', stale))
 
     const d = items.filter(it => it.done).length
     totalItems += items.length
