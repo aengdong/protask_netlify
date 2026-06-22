@@ -65,6 +65,8 @@ export default function OverviewPage() {
 
   const persist = useCallback(() => {
     if (!wsId) return
+    // 삭제됐거나 존재하지 않는 워크스페이스엔 저장하지 않는다 — FK 위반(영구 실패 op)을 만들지 않도록.
+    if (!useStore.getState().workspaces.some(w => w.id === wsId)) return
     enqueue({
       table: 'workspace_canvas',
       kind: 'upsert',

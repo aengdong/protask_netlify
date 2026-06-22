@@ -114,6 +114,18 @@ export async function flush(): Promise<void> {
       lastSyncError = { table: op.table, kind: op.kind, rowId: op.rowId, error: lastErr }
       const se = lastErr as { status?: number; code?: string; message?: string } | null
       console.warn(`[sync] 저장 실패 — ${op.table}/${op.kind} ${op.rowId}`, se?.status ?? '', se?.code ?? '', se?.message ?? lastErr)
+
+      // 재시도로 절대 성공할 수 없는 구조적/데이터 오류(FK·not-null·check·잘못된 입력)는 폐기하고
+      // 큐를 계속 진행한다. 안 그러면 이런 poison op 하나가 큐 맨 앞에서 모든 저장을 영구히 막는다.
+      // (인증/RLS·네트워크 오류는 폐기하지 않음 — 재로그인/온라인 복귀로 복구 가능하므로 아래 백오프로.)
+      const UNDELIVERABLE = new Set(['23503', '23502', '23514', '22P02', '22001'])
+      if (navigator.onLine && se?.code && UNDELIVERABLE.has(se.code)) {
+        console.warn(`[sync] 전송 불가 op 폐기(${se.code}) → 큐 진행: ${op.table}/${op.kind} ${op.rowId}`)
+        queue.shift()
+        saveQueue()
+        failStreak = 0
+        continue
+      }
       // 보존 + 나중 재시도. 실패 시 refetch 금지(로컬 의도 보존).
       flushing = false
       notify(navigator.onLine ? 'error' : 'offline')
