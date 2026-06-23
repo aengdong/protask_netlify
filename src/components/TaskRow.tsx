@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Circle, CheckCircle2, CalendarDays, FolderInput, CircleSlash, Star } from 'lucide-react'
+import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star } from 'lucide-react'
 import { wsColor, type Task, type ChecklistItem } from '../types'
 import { useStore, projectColor, nid } from '../store/store'
 import ProjectChip from './ProjectChip'
@@ -61,7 +61,7 @@ export default function TaskRow({
           }}
           title={done ? '완료 취소 (Space)' : '완료 (Space)'}
         >
-          {done ? <CheckCircle2 size={17} /> : <Circle size={17} />}
+          {done ? <SquareCheckBig size={17} /> : <Square size={17} />}
         </button>
 
         <span className={`min-w-0 flex-1 truncate text-[14.5px] ${done ? 'text-zinc-400 line-through dark:text-zinc-500' : task.important ? 'font-semibold text-amber-700 dark:text-amber-300' : ''}`}>
@@ -122,13 +122,13 @@ function toggleCk(items: ChecklistItem[], id: string): ChecklistItem[] {
   return items.map(c => ({ ...c, done: c.id === id ? !c.done : c.done, children: toggleCk(c.children, id) }))
 }
 function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next: ChecklistItem[]) => void }) {
-  // 태스크 행과 동일한 디자인(원형 완료 토글 + 14.5px 제목 + 같은 높이/hover), 들여쓰기만 추가
-  const render = (list: ChecklistItem[], depth: number): React.ReactNode =>
+  // 태스크 행과 동일한 디자인(네모 완료 토글 + 14.5px 제목 + 같은 높이/hover).
+  // 단계마다 세로 가이드 선 + 들여쓰기로 계층을 눈에 띄게 표시.
+  const render = (list: ChecklistItem[]): React.ReactNode =>
     list.map(c => (
       <div key={c.id}>
         <div
           className="group flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60"
-          style={{ marginLeft: 28 + depth * 20 }}
           onClick={e => e.stopPropagation()}
         >
           <button
@@ -136,16 +136,18 @@ function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next
             onClick={() => onChange(toggleCk(items, c.id))}
             title={c.done ? '완료 취소' : '완료'}
           >
-            {c.done ? <CheckCircle2 size={17} /> : <Circle size={17} />}
+            {c.done ? <SquareCheckBig size={17} /> : <Square size={17} />}
           </button>
           <span className={`min-w-0 flex-1 truncate text-[14.5px] ${c.done ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>
             {c.title}
           </span>
         </div>
-        {render(c.children, depth + 1)}
+        {c.children.length > 0 && (
+          <div className="ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(c.children)}</div>
+        )}
       </div>
     ))
-  return <div className="mb-1">{render(items, 0)}</div>
+  return <div className="mb-1 ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(items)}</div>
 }
 
 /** 일정 칩 — 날짜 있으면 상대 라벨(클릭=재일정), Someday면 "Someday", 없으면 hover 시 "Plan". 클릭 → PlanPopover */
