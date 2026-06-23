@@ -122,21 +122,23 @@ function toggleCk(items: ChecklistItem[], id: string): ChecklistItem[] {
   return items.map(c => ({ ...c, done: c.id === id ? !c.done : c.done, children: toggleCk(c.children, id) }))
 }
 function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next: ChecklistItem[]) => void }) {
+  // 태스크 행과 동일한 디자인(원형 완료 토글 + 14.5px 제목 + 같은 높이/hover), 들여쓰기만 추가
   const render = (list: ChecklistItem[], depth: number): React.ReactNode =>
     list.map(c => (
       <div key={c.id}>
         <div
-          className="flex items-start gap-1.5 py-[1px]"
-          style={{ paddingLeft: 46 + depth * 16 }}
+          className="group flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60"
+          style={{ marginLeft: 28 + depth * 20 }}
           onClick={e => e.stopPropagation()}
         >
-          <input
-            type="checkbox"
-            checked={c.done}
-            onChange={() => onChange(toggleCk(items, c.id))}
-            className="mt-[3px] h-3 w-3 shrink-0 cursor-pointer accent-emerald-500"
-          />
-          <span className={`text-[14px] leading-[1.45] ${c.done ? 'text-zinc-400 line-through dark:text-zinc-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+          <button
+            className={`shrink-0 ${c.done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
+            onClick={() => onChange(toggleCk(items, c.id))}
+            title={c.done ? '완료 취소' : '완료'}
+          >
+            {c.done ? <CheckCircle2 size={17} /> : <Circle size={17} />}
+          </button>
+          <span className={`min-w-0 flex-1 truncate text-[14.5px] ${c.done ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>
             {c.title}
           </span>
         </div>
