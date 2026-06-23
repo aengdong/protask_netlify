@@ -202,7 +202,7 @@ function BacklogColumn({ tasks, overdueIds, onOpen }: { tasks: Task[]; overdueId
   return (
     <div
       ref={setNodeRef}
-      className={`flex h-full min-h-0 w-[200px] shrink-0 flex-col rounded-lg border bg-zinc-100/70 dark:bg-zinc-900/70 ${isOver ? 'border-blue-400 dark:border-blue-600' : 'border-zinc-200 dark:border-zinc-800'}`}
+      className={`flex h-full min-h-0 w-[280px] shrink-0 flex-col rounded-lg border bg-zinc-100/70 dark:bg-zinc-900/70 ${isOver ? 'border-blue-400 dark:border-blue-600' : 'border-zinc-200 dark:border-zinc-800'}`}
     >
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
         <InboxIcon size={14} className="text-zinc-400" />
