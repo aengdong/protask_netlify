@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CalendarX2, RefreshCw, CalendarDays, Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { CalendarX2, RefreshCw, CalendarDays, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Folder } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, selToday, selOverdue, useNavOrder } from '../store/store'
 import { promptDialog, confirmDialog } from '../store/dialogStore'
@@ -30,8 +30,12 @@ export default function TodayPage() {
   const addTask = useStore(s => s.addTask)
   const allTasks = useStore(s => s.tasks)
   const openDetail = useStore(s => s.openDetail)
+  const workspaces = useStore(s => s.workspaces)
+  const projects = useStore(s => s.projects)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [text, setText] = useState('')
+  const [groupBy, setGroupBy] = useState<'section' | 'project'>(() => (localStorage.getItem('pd-todaygroup') === 'project' ? 'project' : 'section'))
+  const setGroupByP = (g: 'section' | 'project') => { setGroupBy(g); localStorage.setItem('pd-todaygroup', g) }
   const addSectionPrompt = async () => {
     const name = await promptDialog({ title: '새 섹션', placeholder: '예: 아침, 오전, 집중시간', confirmLabel: '추가' })
     if (name?.trim()) addSection(name.trim())
@@ -65,8 +69,28 @@ export default function TodayPage() {
     return map
   }, [todayTasks, keys, secIds])
 
-  // 키보드 내비 순서: Overdue → 섹션별 To-do → Done
-  const todoOrder = useMemo(() => keys.flatMap(k => (bySec[k] ?? []).filter(t => t.status !== 'done').map(t => t.id)), [keys, bySec])
+  // 프로젝트(워크스페이스 ▸ 서브프로젝트) 그룹 — 완료 제외
+  const wsGroups = useMemo(() => {
+    const act = todayTasks.filter(t => t.status !== 'done')
+    const noWs = act.filter(t => !t.workspace_id)
+    const byWs = new Map<string, Task[]>()
+    for (const t of act) { if (!t.workspace_id) continue; if (!byWs.has(t.workspace_id)) byWs.set(t.workspace_id, []); byWs.get(t.workspace_id)!.push(t) }
+    const groups = workspaces.filter(w => byWs.has(w.id)).map(w => {
+      const wt = byWs.get(w.id)!
+      const wp = projects.filter(p => p.workspace_id === w.id).sort((a, b) => a.position - b.position)
+      const subs = wp.map(p => ({ project: p, tasks: wt.filter(t => t.project_id === p.id) })).filter(s => s.tasks.length)
+      const noProj = wt.filter(t => !t.project_id || !wp.some(p => p.id === t.project_id))
+      return { ws: w, subs, noProj }
+    })
+    return { noWs, groups }
+  }, [todayTasks, workspaces, projects])
+
+  // 키보드 내비 순서: Overdue → To-do(현재 그룹 순) → Done
+  const todoOrder = useMemo(() => {
+    if (groupBy === 'project')
+      return [...wsGroups.noWs, ...wsGroups.groups.flatMap(g => [...g.subs.flatMap(s => s.tasks), ...g.noProj])].map(t => t.id)
+    return keys.flatMap(k => (bySec[k] ?? []).filter(t => t.status !== 'done').map(t => t.id))
+  }, [groupBy, wsGroups, keys, bySec])
   useNavOrder(useMemo(
     () => [...new Set([...overdue.map(t => t.id), ...todoOrder, ...todayTasks.filter(t => t.status === 'done').map(t => t.id)])],
     [overdue, todoOrder, todayTasks],
@@ -125,9 +149,17 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto max-w-[820px] px-5 py-5">
-      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="text-[19px] font-bold tracking-tight">Today</h1>
         <span className="text-[13.5px] font-medium text-zinc-400">{fmtDate(todayStr())} · {doneCount}/{todayTasks.length} 완료</span>
+        <div className="ml-auto flex items-center rounded-md border border-zinc-200 p-0.5 dark:border-zinc-700">
+          {([['section', '섹션'], ['project', '프로젝트']] as const).map(([g, label]) => (
+            <button key={g} onClick={() => setGroupByP(g)}
+              className={`rounded px-2 py-0.5 text-[13px] font-semibold ${groupBy === g ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 데스크탑 인라인 캡처 (모바일은 FAB) */}
@@ -171,14 +203,47 @@ export default function TodayPage() {
 
       {/* To-dos (섹션별) / Done */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <GroupLabel label="To-dos" count={todoCount} />
-        <Section secKey={NONE} name="" tasks={(bySec[NONE] ?? []).filter(t => t.status !== 'done')} onOpen={openDetail} isFirst isLast hideHeader />
-        {sorted.map((s, i) => (
-          <Section key={s.id} secKey={s.id} name={s.name}
-            tasks={(bySec[s.id] ?? []).filter(t => t.status !== 'done')}
-            onOpen={openDetail} isFirst={i === 0} isLast={i === sorted.length - 1} />
-        ))}
-        <AddSectionBtn onAdd={addSectionPrompt} />
+        {groupBy === 'section' ? (
+          <>
+            <GroupLabel label="To-dos" count={todoCount} />
+            <Section secKey={NONE} name="" tasks={(bySec[NONE] ?? []).filter(t => t.status !== 'done')} onOpen={openDetail} isFirst isLast hideHeader />
+            {sorted.map((s, i) => (
+              <Section key={s.id} secKey={s.id} name={s.name}
+                tasks={(bySec[s.id] ?? []).filter(t => t.status !== 'done')}
+                onOpen={openDetail} isFirst={i === 0} isLast={i === sorted.length - 1} />
+            ))}
+            <AddSectionBtn onAdd={addSectionPrompt} />
+          </>
+        ) : (
+          <div className="mb-2">
+            {wsGroups.noWs.length > 0 && (
+              <div className="mb-3">
+                {wsGroups.groups.length > 0 && <WsHeader label="미분류" />}
+                {wsGroups.noWs.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+              </div>
+            )}
+            {wsGroups.groups.map(({ ws, subs, noProj }) => (
+              <div key={ws.id} className="mb-3">
+                <WsHeader label={ws.name} />
+                {subs.map(s => (
+                  <div key={s.project.id} className="mb-1.5">
+                    <SubLabel label={s.project.title} />
+                    {s.tasks.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+                  </div>
+                ))}
+                {noProj.length > 0 && (
+                  <div className="mb-1.5">
+                    {subs.length > 0 && <SubLabel label="서브프로젝트 없음" muted />}
+                    {noProj.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+                  </div>
+                )}
+              </div>
+            ))}
+            {wsGroups.noWs.length === 0 && wsGroups.groups.length === 0 && (
+              <p className="px-2 py-3 text-[13.5px] text-zinc-400">오늘 할 일이 없습니다</p>
+            )}
+          </div>
+        )}
         {doneToday.length > 0 && (
           <section className="mt-5">
             <GroupLabel label="Done" count={doneCount} />
@@ -290,6 +355,25 @@ function AddSectionBtn({ onAdd }: { onAdd: () => void }) {
   )
 }
 
+/** 프로젝트 그룹 헤더 (워크스페이스=프로젝트) */
+function WsHeader({ label }: { label: string }) {
+  return (
+    <div className="mb-1 flex items-center gap-2 border-b border-zinc-200 px-2 pb-1 dark:border-zinc-800">
+      <Folder size={14} className="shrink-0 text-zinc-400" />
+      <span className="text-[14.5px] font-bold tracking-tight text-zinc-700 dark:text-zinc-200">{label}</span>
+    </div>
+  )
+}
+
+/** 서브프로젝트 소제목 (들여쓰기) */
+function SubLabel({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <div className="mt-0.5 mb-0.5 pl-4">
+      <span className={`text-[12.5px] font-semibold ${muted ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-300'}`}>{label}</span>
+    </div>
+  )
+}
+
 /** 시간대 섹션 — 드롭존 + 정렬. 커스텀 섹션은 헤더에서 이동·이름변경·삭제. */
 function Section({
   secKey, name, tasks, onOpen, isFirst, isLast, hideHeader,
@@ -316,11 +400,12 @@ function Section({
       }`}
     >
       {!hideHeader && (
-        <div className="group mb-0.5 flex items-center gap-1.5 px-2 text-zinc-400">
-          <span className="text-[13px] font-bold tracking-wide">{name}</span>
-          <span className="text-[12px] font-semibold">{tasks.length || ''}</span>
+        <div className="group mb-1 flex items-center gap-2 border-b border-zinc-200 px-2 pb-1 dark:border-zinc-800">
+          <span className="h-3.5 w-1 shrink-0 rounded-full bg-blue-500/70" />
+          <span className="text-[14.5px] font-bold tracking-tight text-zinc-700 dark:text-zinc-200">{name}</span>
+          <span className="text-[12.5px] font-semibold text-zinc-400">{tasks.length || ''}</span>
           {custom && (
-            <span className="invisible flex items-center gap-0.5 group-hover:visible">
+            <span className="invisible flex items-center gap-0.5 text-zinc-400 group-hover:visible">
               <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="위로" disabled={isFirst}
                 onClick={() => moveSection(secKey, -1)}><ChevronUp size={12.5} /></button>
               <button className="rounded p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200" title="아래로" disabled={isLast}

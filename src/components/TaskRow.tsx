@@ -82,7 +82,7 @@ export default function TaskRow({
       </div>
 
       {task.checklist.length > 0 && (
-        <Subtasks items={task.checklist} onChange={next => updateTask(task.id, { checklist: next })} />
+        <Subtasks items={task.checklist} projectId={task.project_id} workspaceId={task.workspace_id} onChange={next => updateTask(task.id, { checklist: next })} />
       )}
 
       {addingSub && (
@@ -136,12 +136,12 @@ function addChildCk(items: ChecklistItem[], id: string, title: string): Checklis
   )
 }
 
-function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next: ChecklistItem[]) => void }) {
-  // 태스크 행과 동일한 디자인 + 단계마다 세로 가이드 선/들여쓰기. 각 행은 우클릭 메뉴 포함.
+function Subtasks({ items, projectId, workspaceId, onChange }: { items: ChecklistItem[]; projectId: string | null; workspaceId: string | null; onChange: (next: ChecklistItem[]) => void }) {
+  // 태스크 행과 동일한 디자인 + 단계마다 세로 가이드 선/들여쓰기. 각 행은 우클릭 메뉴 + 부모 프로젝트 태그.
   const render = (list: ChecklistItem[]): React.ReactNode =>
     list.map(c => (
       <div key={c.id}>
-        <SubtaskRow item={c} root={items} onChange={onChange} />
+        <SubtaskRow item={c} root={items} projectId={projectId} workspaceId={workspaceId} onChange={onChange} />
         {c.children.length > 0 && (
           <div className="ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(c.children)}</div>
         )}
@@ -150,8 +150,8 @@ function Subtasks({ items, onChange }: { items: ChecklistItem[]; onChange: (next
   return <div className="mb-1 ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(items)}</div>
 }
 
-/** 서브태스크 한 줄 — 태스크 행과 같은 모양 + 우클릭 메뉴(완료·이름변경·하위추가·삭제) */
-function SubtaskRow({ item, root, onChange }: { item: ChecklistItem; root: ChecklistItem[]; onChange: (next: ChecklistItem[]) => void }) {
+/** 서브태스크 한 줄 — 태스크 행과 같은 모양 + 우클릭 메뉴(완료·이름변경·하위추가·삭제) + 부모 프로젝트 태그 */
+function SubtaskRow({ item, root, projectId, workspaceId, onChange }: { item: ChecklistItem; root: ChecklistItem[]; projectId: string | null; workspaceId: string | null; onChange: (next: ChecklistItem[]) => void }) {
   const { onContextMenu, menu } = useContextMenu(close => (
     <>
       <MenuItem icon={item.done ? Square : SquareCheckBig} label={item.done ? '완료 취소' : '완료'} onClose={close} onPick={() => onChange(toggleCk(root, item.id))} />
@@ -178,6 +178,9 @@ function SubtaskRow({ item, root, onChange }: { item: ChecklistItem; root: Check
         <span className={`min-w-0 flex-1 truncate text-[14.5px] ${item.done ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>
           {item.title}
         </span>
+        {(projectId || workspaceId) && (
+          <span className="shrink-0"><ProjectChip projectId={projectId} workspaceId={workspaceId} /></span>
+        )}
       </div>
       {menu}
     </>
