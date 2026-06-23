@@ -1,7 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Pencil, CheckCircle2, Circle, Star, ListPlus, Trash2 } from 'lucide-react'
 import { useStore } from '../store/store'
 import type { Task } from '../types'
+
+/** 카드·행에 우클릭 메뉴를 붙이는 훅 — onContextMenu를 요소에 걸고, menu를 형제로 렌더한다. */
+export function useTaskContextMenu(task: Task, onOpen: (id: string) => void) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const onContextMenu = (e: MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setPos({ x: e.clientX, y: e.clientY })
+  }
+  const menu = pos ? <TaskContextMenu task={task} x={pos.x} y={pos.y} onOpen={onOpen} onClose={() => setPos(null)} /> : null
+  return { onContextMenu, menu }
+}
 
 /** 태스크 우클릭 컨텍스트 메뉴 — 수정(상세)·완료·중요·서브태스크·삭제. 삭제는 즉시(Ctrl+Z로 복원). */
 export default function TaskContextMenu({

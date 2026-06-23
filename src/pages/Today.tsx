@@ -21,6 +21,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { addDays } from 'date-fns'
 import TaskRow, { DeadlineBadge } from '../components/TaskRow'
 import ProjectChip from '../components/ProjectChip'
+import { useTaskContextMenu } from '../components/TaskContextMenu'
 import { Link } from 'react-router-dom'
 import WeekBoard from './Week'
 
@@ -590,10 +591,13 @@ function BoardCard({ task, onOpen }: { task: Task; onOpen: (id: string) => void 
   const done = task.status === 'done'
   const ckTotal = countCk(task.checklist)
   const ckDone = countCk(task.checklist, true)
+  const { onContextMenu, menu } = useTaskContextMenu(task, onOpen)
   return (
+    <>
     <div
       className={`cursor-pointer rounded-md border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-blue-400 dark:border-zinc-700 dark:bg-zinc-800/90 dark:hover:border-blue-600 ${done ? 'opacity-60' : ''}`}
       onClick={() => onOpen(task.id)}
+      onContextMenu={onContextMenu}
     >
       <div className="flex items-start gap-2">
         <button
@@ -614,5 +618,7 @@ function BoardCard({ task, onOpen }: { task: Task; onOpen: (id: string) => void 
         </div>
       </div>
     </div>
+    {menu}
+    </>
   )
 }

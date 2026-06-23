@@ -12,6 +12,7 @@ import { useStore, useNavOrder } from '../store/store'
 import { useGcal } from '../store/gcalStore'
 import { toStr, todayStr, fmtDateShort } from '../lib/dates'
 import { between } from '../lib/position'
+import { useTaskContextMenu } from '../components/TaskContextMenu'
 import { countCk } from '../lib/group'
 import { DeadlineBadge } from '../components/TaskRow'
 import type { Task } from '../types'
@@ -294,18 +295,23 @@ function EventRow({ ev }: { ev: GcalEvent }) {
 function SortableCard({ task, onOpen, overdue }: { task: Task; onOpen: (id: string) => void; overdue?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const selected = useStore(s => s.hoverTaskId === task.id)
+  const { onContextMenu, menu } = useTaskContextMenu(task, onOpen)
   return (
-    <div
-      ref={setNodeRef}
-      data-navid={task.id}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-      className={isDragging ? 'opacity-40' : ''}
-      onClick={() => onOpen(task.id)}
-    >
-      <CardBody task={task} selected={selected} overdue={overdue} />
-    </div>
+    <>
+      <div
+        ref={setNodeRef}
+        data-navid={task.id}
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        {...attributes}
+        {...listeners}
+        className={isDragging ? 'opacity-40' : ''}
+        onClick={() => onOpen(task.id)}
+        onContextMenu={onContextMenu}
+      >
+        <CardBody task={task} selected={selected} overdue={overdue} />
+      </div>
+      {menu}
+    </>
   )
 }
 

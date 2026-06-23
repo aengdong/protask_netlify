@@ -10,6 +10,7 @@ import { useStore, useNavOrder, projectColor } from '../../store/store'
 import { promptDialog, confirmDialog } from '../../store/dialogStore'
 import { paletteColor, type Project, type Task } from '../../types'
 import { between } from '../../lib/position'
+import { useTaskContextMenu } from '../TaskContextMenu'
 import { countCk } from '../../lib/group'
 import { DeadlineBadge } from '../TaskRow'
 import { fmtDateShort } from '../../lib/dates'
@@ -177,11 +178,15 @@ function Column({ colId, title, color, tasks, project, onOpen, onAdd }: {
 function SortableCard({ task, onOpen }: { task: Task; onOpen: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const selected = useStore(s => s.hoverTaskId === task.id)
+  const { onContextMenu, menu } = useTaskContextMenu(task, onOpen)
   return (
-    <div ref={setNodeRef} data-navid={task.id} style={{ transform: CSS.Transform.toString(transform), transition }} {...attributes} {...listeners}
-      className={isDragging ? 'opacity-40' : ''} onClick={() => onOpen(task.id)}>
-      <CardBody task={task} selected={selected} />
-    </div>
+    <>
+      <div ref={setNodeRef} data-navid={task.id} style={{ transform: CSS.Transform.toString(transform), transition }} {...attributes} {...listeners}
+        className={isDragging ? 'opacity-40' : ''} onClick={() => onOpen(task.id)} onContextMenu={onContextMenu}>
+        <CardBody task={task} selected={selected} />
+      </div>
+      {menu}
+    </>
   )
 }
 
