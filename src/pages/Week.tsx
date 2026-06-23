@@ -162,10 +162,10 @@ export default function WeekBoard() {
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 px-5 pt-5 pb-3">
         <h1 className="text-[19px] font-bold tracking-tight">This Week</h1>
-        <span className="text-[13.5px] font-medium text-zinc-400">{rangeLabel}</span>
+        <span className="text-[15px] font-medium text-zinc-400">{rangeLabel}</span>
         <div className="ml-auto flex items-center gap-1">
           <button className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800" onClick={() => setWeekOffset(o => o - 1)} title="이전 주"><ChevronLeft size={16} /></button>
-          <button className={`rounded-md px-2 py-1 text-[13px] font-semibold ${weekOffset === 0 ? 'text-zinc-300 dark:text-zinc-600' : 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950'}`} onClick={() => setWeekOffset(0)} disabled={weekOffset === 0}>이번주</button>
+          <button className={`rounded-md px-2 py-1 text-[14px] font-semibold ${weekOffset === 0 ? 'text-zinc-300 dark:text-zinc-600' : 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950'}`} onClick={() => setWeekOffset(0)} disabled={weekOffset === 0}>이번주</button>
           <button className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800" onClick={() => setWeekOffset(o => o + 1)} title="다음 주"><ChevronRight size={16} /></button>
         </div>
       </div>
@@ -205,8 +205,8 @@ function BacklogColumn({ tasks, overdueIds, onOpen }: { tasks: Task[]; overdueId
     >
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
         <InboxIcon size={14} className="text-zinc-400" />
-        <span className="text-[13.5px] font-bold">배정 대기</span>
-        <span className="text-[12.5px] font-semibold text-zinc-400">{tasks.length}</span>
+        <span className="text-[15px] font-bold">배정 대기</span>
+        <span className="text-[13.5px] font-semibold text-zinc-400">{tasks.length}</span>
       </div>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2">
@@ -236,9 +236,9 @@ function DayColumn({ date, label, short, isToday, isPast, sections, cols, events
       } ${isPast ? 'opacity-70' : ''}`}
     >
       <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
-        <span className={`text-[13.5px] font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{label}</span>
-        <span className="text-[12px] font-medium text-zinc-400">{short}</span>
-        <span className="text-[12.5px] font-semibold text-zinc-400">{count || ''}</span>
+        <span className={`text-[15px] font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{label}</span>
+        <span className="text-[13px] font-medium text-zinc-400">{short}</span>
+        <span className="text-[13.5px] font-semibold text-zinc-400">{count || ''}</span>
         <button className="ml-auto rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800" onClick={() => setAdding(true)} title="태스크 추가"><Plus size={14} /></button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
@@ -251,7 +251,7 @@ function DayColumn({ date, label, short, isToday, isPast, sections, cols, events
         {adding && (
           <input
             autoFocus
-            className="input !text-[13px]"
+            className="input !text-[14.5px]"
             placeholder="태스크 입력 후 Enter"
             value={text}
             onChange={e => setText(e.target.value)}
@@ -271,7 +271,7 @@ function SectionZone({ date, secId, label, tasks, onOpen }: { date: string; secI
   const { setNodeRef, isOver } = useDroppable({ id: dsKey(date, secId) })
   return (
     <div ref={setNodeRef} className={`rounded-md ${isOver ? 'bg-blue-100/50 dark:bg-blue-950/30' : ''}`}>
-      {label && <div className="px-1 pt-1 pb-0.5 text-[11px] font-semibold tracking-wide text-zinc-400">{label}</div>}
+      {label && <div className="px-1 pt-1 pb-0.5 text-[12.5px] font-semibold tracking-wide text-zinc-400">{label}</div>}
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-[8px] flex-col gap-1.5">
           {tasks.map(t => <SortableCard key={t.id} task={t} onOpen={onOpen} />)}
@@ -283,7 +283,7 @@ function SectionZone({ date, secId, label, tasks, onOpen }: { date: string; secI
 
 function EventRow({ ev }: { ev: GcalEvent }) {
   return (
-    <div className="flex items-center gap-1.5 px-1 py-0.5 text-[11.5px] text-zinc-500 dark:text-zinc-400" title={ev.summary}>
+    <div className="flex items-center gap-1.5 px-1 py-0.5 text-[13px] text-zinc-500 dark:text-zinc-400" title={ev.summary}>
       <span className="h-1.5 w-1.5 shrink-0 rounded-[2px]" style={{ background: ev.color ?? '#3b82f6' }} />
       <span className="shrink-0 tabular-nums">{ev.allDay ? '종일' : ev.start.slice(11, 16)}</span>
       <span className="truncate">{ev.summary}</span>
@@ -335,12 +335,12 @@ function CardBody({ task, overlay, selected, overdue }: { task: Task; overlay?: 
           <Check size={11} strokeWidth={3} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className={`text-[13px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>
+          <div className={`text-[14.5px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden">
             {overdue && task.scheduled_date && (
-              <span className="rounded-full bg-red-50 px-1.5 py-px text-[11px] font-semibold text-red-600 dark:bg-red-950 dark:text-red-400">지연 {fmtDateShort(task.scheduled_date)}</span>
+              <span className="rounded-full bg-red-50 px-1.5 py-px text-[12px] font-semibold text-red-600 dark:bg-red-950 dark:text-red-400">지연 {fmtDateShort(task.scheduled_date)}</span>
             )}
-            {ckTotal > 0 && <span className="text-[12px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>}
+            {ckTotal > 0 && <span className="text-[13px] font-medium text-zinc-400">{ckDone}/{ckTotal}</span>}
             {task.deadline && !done && <DeadlineBadge deadline={task.deadline} />}
           </div>
         </div>
