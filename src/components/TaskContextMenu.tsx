@@ -1,5 +1,5 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Pencil, CheckCircle2, Circle, Star, ListPlus, Trash2 } from 'lucide-react'
+import { Pencil, SquareCheckBig, Square, Star, ListPlus, Trash2 } from 'lucide-react'
 import { useStore } from '../store/store'
 import type { Task } from '../types'
 
@@ -85,7 +85,7 @@ export default function TaskContextMenu({
         onContextMenu={e => e.preventDefault()}
       >
         <Item icon={Pencil} label="수정 (상세 열기)" onPick={() => onOpen(task.id)} />
-        <Item icon={done ? Circle : CheckCircle2} label={done ? '완료 취소' : '완료'} onPick={() => toggleDone(task.id)} />
+        <Item icon={done ? Square : SquareCheckBig} label={done ? '완료 취소' : '완료'} onPick={() => toggleDone(task.id)} />
         <Item icon={Star} label={task.important ? '중요 해제' : '중요 표시'} onPick={() => updateTask(task.id, { important: !task.important })} />
         <Item icon={ListPlus} label="서브태스크 추가" onPick={() => setAddSubFor(task.id)} />
         <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />

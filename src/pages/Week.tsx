@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, Plus, ChevronLeft, ChevronRight, Inbox as InboxIcon } from 'lucide-react'
+import { Square, SquareCheckBig, Plus, ChevronLeft, ChevronRight, Inbox as InboxIcon } from 'lucide-react'
 import { startOfWeek, addDays, addWeeks, format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useStore, useNavOrder } from '../store/store'
@@ -328,12 +328,12 @@ function CardBody({ task, overlay, selected, overdue }: { task: Task; overlay?: 
     >
       <div className="flex items-start gap-2">
         <button
-          className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-zinc-300 text-transparent hover:border-emerald-500 dark:border-zinc-600'}`}
+          className={`mt-[1px] shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
           title="완료 토글"
           onClick={e => { e.stopPropagation(); toggleDone(task.id) }}
           onPointerDown={e => e.stopPropagation()}
         >
-          <Check size={11} strokeWidth={3} />
+          {done ? <SquareCheckBig size={16} /> : <Square size={16} />}
         </button>
         <div className="min-w-0 flex-1">
           <div className={`text-[14.5px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>

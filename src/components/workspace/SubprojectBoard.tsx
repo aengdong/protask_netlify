@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Square, SquareCheckBig, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useStore, useNavOrder, projectColor } from '../../store/store'
 import { promptDialog, confirmDialog } from '../../store/dialogStore'
 import { paletteColor, type Project, type Task } from '../../types'
@@ -198,9 +198,9 @@ function CardBody({ task, overlay, selected }: { task: Task; overlay?: boolean; 
   return (
     <div className={`cursor-pointer rounded-md border bg-white p-2.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-blue-400 dark:bg-zinc-800/90 dark:hover:border-blue-600 ${overlay ? 'rotate-1 shadow-lg' : ''} ${done ? 'opacity-60' : ''} ${selected ? 'border-blue-400 ring-2 ring-blue-500/50 dark:border-blue-600' : 'border-zinc-200 dark:border-zinc-700'}`}>
       <div className="flex items-start gap-2">
-        <button className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-zinc-300 text-transparent hover:border-emerald-500 dark:border-zinc-600'}`}
+        <button className={`mt-[1px] shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
           title="완료 토글" onClick={e => { e.stopPropagation(); toggleDone(task.id) }} onPointerDown={e => e.stopPropagation()}>
-          <Check size={11} strokeWidth={3} />
+          {done ? <SquareCheckBig size={16} /> : <Square size={16} />}
         </button>
         <div className="min-w-0 flex-1">
           <div className={`text-[13.5px] leading-snug ${done ? 'line-through' : ''}`}>{task.title}</div>

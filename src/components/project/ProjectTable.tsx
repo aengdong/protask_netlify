@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Square, SquareCheckBig, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { useStore, bucketOf, bucketPatch, useNavOrder } from '../../store/store'
 import { BUCKET_DOT, BUCKET_LABEL, type Bucket, type Task } from '../../types'
 import { fmtDateShort } from '../../lib/dates'
@@ -244,12 +244,12 @@ function Row({ task, gridCls, onOpen, onToggleDone }: {
       } ${selected ? 'bg-zinc-50 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/40' : ''}`}
     >
       <button
-        className={`flex h-4 w-4 items-center justify-center rounded-full border transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-zinc-300 text-transparent hover:border-emerald-500 dark:border-zinc-600'}`}
+        className={`shrink-0 ${done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
         title="완료 토글"
         onClick={e => { e.stopPropagation(); onToggleDone(task.id) }}
         onPointerDown={e => e.stopPropagation()}
       >
-        <Check size={11} strokeWidth={3} />
+        {done ? <SquareCheckBig size={16} /> : <Square size={16} />}
       </button>
 
       <button className="flex min-w-0 items-center gap-2 text-left" onClick={() => onOpen(task.id)}>
