@@ -186,6 +186,9 @@ export function Subtasks({ items, projectId, workspaceId, onChange }: { items: C
 
 /** 서브태스크 한 줄 — 태스크 행과 같은 모양 + 우클릭 메뉴(완료·이름변경·하위추가·삭제) + 부모 프로젝트 태그 */
 function SubtaskRow({ item, root, projectId, workspaceId, onChange }: { item: ChecklistItem; root: ChecklistItem[]; projectId: string | null; workspaceId: string | null; onChange: (next: ChecklistItem[]) => void }) {
+  const selected = useStore(s => s.hoverTaskId === item.id)
+  const rowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (selected) rowRef.current?.scrollIntoView({ block: 'nearest' }) }, [selected])
   const { onContextMenu, menu } = useContextMenu(close => (
     <>
       <MenuItem icon={item.done ? Square : SquareCheckBig} label={item.done ? '완료 취소' : '완료'} onClose={close} onPick={() => onChange(toggleCk(root, item.id))} />
@@ -200,7 +203,11 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange }: { item: Ch
   return (
     <>
       <div
-        className="group flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60"
+        ref={rowRef}
+        data-navid={item.id}
+        className={`group flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60 ${
+          selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
+        }`}
         onClick={e => e.stopPropagation()}
         onContextMenu={onContextMenu}
       >
