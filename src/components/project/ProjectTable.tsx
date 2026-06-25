@@ -5,8 +5,10 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Square, SquareCheckBig, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Square, SquareCheckBig, ChevronDown, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useStore, bucketOf, bucketPatch, useNavOrder } from '../../store/store'
+import { promptDialog, confirmDialog } from '../../store/dialogStore'
+import { useContextMenu, MenuItem } from '../TaskContextMenu'
 import { BUCKET_DOT, BUCKET_LABEL, type Bucket, type Task } from '../../types'
 import { fmtDateShort } from '../../lib/dates'
 import { between } from '../../lib/position'
@@ -187,13 +189,29 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
   const [text, setText] = useState('')
   const showHeader = groupBy !== 'none'
   const { setNodeRef } = useDroppable({ id: `grp:${group.key}` })
+  const updateProject = useStore(s => s.updateProject)
+  const deleteProject = useStore(s => s.deleteProject)
+  const isSub = groupBy === 'project' && !!group.project_id // 서브프로젝트 그룹(미분류 제외)
+  const { onContextMenu, menu } = useContextMenu(close => (
+    <>
+      <MenuItem icon={Pencil} label="이름 변경" onClose={close} onPick={async () => {
+        const n = await promptDialog({ title: '서브프로젝트 이름 변경', defaultValue: group.label, confirmLabel: '변경' })
+        if (n?.trim()) updateProject(group.project_id!, { title: n.trim() })
+      }} />
+      <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+      <MenuItem icon={Trash2} label="삭제" danger onClose={close} onPick={async () => {
+        if (await confirmDialog({ title: '서브프로젝트 삭제', message: `"${group.label}"와 포함된 태스크가 모두 삭제됩니다. 진행할까요?`, confirmLabel: '삭제', danger: true })) deleteProject(group.project_id!)
+      }} />
+    </>
+  ))
 
   const submit = () => { const v = text.trim(); if (v) onAdd(v); setText('') }
 
   return (
+    <>
     <section className="mb-1">
       {showHeader && (
-        <button className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-left" onClick={onToggle}>
+        <button className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-left" onClick={onToggle} onContextMenu={isSub ? onContextMenu : undefined}>
           {collapsed ? <ChevronRight size={13} className="text-zinc-400" /> : <ChevronDown size={13} className="text-zinc-400" />}
           {group.col && <span className={`h-2 w-2 rounded-full ${BUCKET_DOT[group.col]}`} />}
           <span className="text-[13.5px] font-bold">{group.label}</span>
@@ -220,6 +238,8 @@ function GroupBlock({ group, groupBy, gridCls, collapsed, onToggle, onOpen, onTo
         </div>
       )}
     </section>
+    {menu}
+    </>
   )
 }
 
