@@ -143,6 +143,14 @@ export function addCkAtDepth(items: ChecklistItem[], depth: number, item: Checkl
   const last = items[items.length - 1]
   return [...items.slice(0, -1), { ...last, children: addCkAtDepth(last.children, depth - 1, item) }]
 }
+/** parentId의 children에 depth 들여써서 추가 (서브태스크의 하위에 Shift+Enter로 추가) */
+function addUnderCk(items: ChecklistItem[], parentId: string, depth: number, item: ChecklistItem): ChecklistItem[] {
+  return items.map(c =>
+    c.id === parentId
+      ? { ...c, children: addCkAtDepth(c.children, depth, item) }
+      : { ...c, children: addUnderCk(c.children, parentId, depth, item) },
+  )
+}
 /** 들여쓰기 — 직전 형제의 자식으로 이동(맨 앞 항목은 불가). */
 function indentCk(items: ChecklistItem[], id: string): ChecklistItem[] {
   const i = items.findIndex(c => c.id === id)
@@ -200,6 +208,8 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
       <MenuItem icon={Trash2} label="삭제" danger onClose={close} onPick={() => onChange(deleteCk(root, item.id))} />
     </>
   ))
+  const addingChild = useStore(s => s.addSubFor === item.id)
+  const setAddSubFor = useStore(s => s.setAddSubFor)
   return (
     <>
       <div
@@ -225,6 +235,14 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
           <span className="shrink-0"><ProjectChip projectId={projectId} workspaceId={workspaceId} /></span>
         )}
       </div>
+      {addingChild && (
+        <div className="ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
+          <InlineSubAdd
+            onAdd={(title, depth) => onChange(addUnderCk(root, item.id, depth, { id: nid('ck'), title, done: false, children: [] }))}
+            onClose={() => setAddSubFor(null)}
+          />
+        </div>
+      )}
       {menu}
     </>
   )
