@@ -296,7 +296,7 @@ function Row({ task, gridCls, onOpen, onToggleDone }: {
       <span className="flex">{task.deadline && !done ? <DeadlineBadge deadline={task.deadline} /> : task.deadline ? <span className="text-[12px] text-zinc-400">{fmtDateShort(task.deadline)}</span> : null}</span>
     </div>
     {task.checklist.length > 0 && (
-      <Subtasks items={task.checklist} projectId={task.project_id} workspaceId={task.workspace_id} onChange={next => updateTask(task.id, { checklist: next })} />
+      <Subtasks items={task.checklist} projectId={task.project_id} workspaceId={task.workspace_id} hideProjectTag onChange={next => updateTask(task.id, { checklist: next })} />
     )}
     {addingSub && (
       <InlineSubAdd

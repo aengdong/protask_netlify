@@ -213,7 +213,7 @@ function CardBody({ task, overlay, selected }: { task: Task; overlay?: boolean; 
         </div>
       </div>
       {task.checklist.length > 0 && (
-        <Subtasks items={task.checklist} projectId={task.project_id} workspaceId={task.workspace_id} onChange={next => updateTask(task.id, { checklist: next })} />
+        <Subtasks items={task.checklist} projectId={task.project_id} workspaceId={task.workspace_id} hideProjectTag onChange={next => updateTask(task.id, { checklist: next })} />
       )}
     </div>
   )
