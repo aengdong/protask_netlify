@@ -185,11 +185,11 @@ export function Subtasks({ items, projectId, workspaceId, onChange, hideProjectT
       <div key={c.id}>
         <SubtaskRow item={c} root={items} projectId={projectId} workspaceId={workspaceId} onChange={onChange} hideProjectTag={hideProjectTag} />
         {c.children.length > 0 && (
-          <div className="ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(c.children)}</div>
+          <div className="ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(c.children)}</div>
         )}
       </div>
     ))
-  return <div className="mb-1 ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(items)}</div>
+  return <div className="mb-1 ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">{render(items)}</div>
 }
 
 /** 서브태스크 한 줄 — 태스크 행과 같은 모양 + 우클릭 메뉴(완료·이름변경·하위추가·삭제) + 부모 프로젝트 태그 */
@@ -236,7 +236,7 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
         )}
       </div>
       {addingChild && (
-        <div className="ml-7 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
+        <div className="ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
           <InlineSubAdd
             onAdd={(title, depth) => onChange(addUnderCk(root, item.id, depth, { id: nid('ck'), title, done: false, children: [] }))}
             onClose={() => setAddSubFor(null)}
