@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star, Pencil, ListPlus, Trash2 } from 'lucide-react'
+import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star, Pencil, ListPlus, Trash2, IndentIncrease, IndentDecrease } from 'lucide-react'
 import { wsColor, type Task, type ChecklistItem } from '../types'
 import { useStore, projectColor, nid } from '../store/store'
 import ProjectChip from './ProjectChip'
@@ -87,7 +87,7 @@ export default function TaskRow({
 
       {addingSub && (
         <InlineSubAdd
-          onAdd={title => updateTask(task.id, { checklist: [...task.checklist, { id: nid('ck'), title, done: false, children: [] }] })}
+          onAdd={(title, depth) => updateTask(task.id, { checklist: addCkAtDepth(task.checklist, depth, { id: nid('ck'), title, done: false, children: [] }) })}
           onClose={() => setAddSubFor(null)}
         />
       )}
@@ -97,22 +97,24 @@ export default function TaskRow({
   )
 }
 
-/** 리스트에서 Shift+Enter로 여는 인라인 서브태스크 입력 — Enter 연속 추가, Esc/빈칸 blur 종료 */
-export function InlineSubAdd({ onAdd, onClose }: { onAdd: (title: string) => void; onClose: () => void }) {
+/** 인라인 서브태스크 입력 — Enter 연속 추가, Tab 들여쓰기 / Shift+Tab 내어쓰기로 차원 이동, Esc 종료 */
+export function InlineSubAdd({ onAdd, onClose }: { onAdd: (title: string, depth: number) => void; onClose: () => void }) {
   const [text, setText] = useState('')
+  const [depth, setDepth] = useState(0)
   return (
-    <div className="py-0.5 pr-2" style={{ paddingLeft: 46 }} onClick={e => e.stopPropagation()}>
+    <div className="py-0.5 pr-2" style={{ paddingLeft: 46 + depth * 20 }} onClick={e => e.stopPropagation()}>
       <input
         autoFocus
         className="input !py-1 !text-[14px]"
-        placeholder="서브태스크 — Enter 추가 · Esc 종료"
+        placeholder={depth > 0 ? `서브태스크 ${depth}단계 — Enter 추가 · Tab/Shift+Tab 단계 이동` : '서브태스크 — Enter 추가 · Tab 들여쓰기 · Esc 종료'}
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); const v = text.trim(); if (v) { onAdd(v); setText('') } }
+          if (e.key === 'Tab') { e.preventDefault(); setDepth(d => e.shiftKey ? Math.max(0, d - 1) : Math.min(d + 1, 6)) }
+          else if (e.key === 'Enter') { e.preventDefault(); const v = text.trim(); if (v) { onAdd(v, depth); setText('') } }
           else if (e.key === 'Escape') { e.preventDefault(); onClose() }
         }}
-        onBlur={() => { const v = text.trim(); if (v) onAdd(v); onClose() }}
+        onBlur={() => { const v = text.trim(); if (v) onAdd(v, depth); onClose() }}
       />
     </div>
   )
@@ -134,6 +136,38 @@ function addChildCk(items: ChecklistItem[], id: string, title: string): Checklis
       ? { ...c, children: [...c.children, { id: nid('ck'), title, done: false, children: [] }] }
       : { ...c, children: addChildCk(c.children, id, title) },
   )
+}
+/** depth 단계만큼 들여써서 추가 — 각 단계의 마지막 항목 아래로 중첩(연속 추가 시 같은 레벨 유지). */
+export function addCkAtDepth(items: ChecklistItem[], depth: number, item: ChecklistItem): ChecklistItem[] {
+  if (depth <= 0 || items.length === 0) return [...items, item]
+  const last = items[items.length - 1]
+  return [...items.slice(0, -1), { ...last, children: addCkAtDepth(last.children, depth - 1, item) }]
+}
+/** 들여쓰기 — 직전 형제의 자식으로 이동(맨 앞 항목은 불가). */
+function indentCk(items: ChecklistItem[], id: string): ChecklistItem[] {
+  const i = items.findIndex(c => c.id === id)
+  if (i > 0) {
+    const prev = items[i - 1]
+    const next = [...items]
+    next[i - 1] = { ...prev, children: [...prev.children, items[i]] }
+    next.splice(i, 1)
+    return next
+  }
+  return items.map(c => ({ ...c, children: indentCk(c.children, id) }))
+}
+/** 내어쓰기 — 부모의 형제(부모 바로 뒤)로 이동(최상위는 불가). */
+function outdentCk(items: ChecklistItem[], id: string): ChecklistItem[] {
+  for (let i = 0; i < items.length; i++) {
+    const j = items[i].children.findIndex(c => c.id === id)
+    if (j !== -1) {
+      const moved = items[i].children[j]
+      const next = [...items]
+      next[i] = { ...items[i], children: items[i].children.filter(c => c.id !== id) }
+      next.splice(i + 1, 0, moved)
+      return next
+    }
+  }
+  return items.map(c => ({ ...c, children: outdentCk(c.children, id) }))
 }
 
 export function Subtasks({ items, projectId, workspaceId, onChange }: { items: ChecklistItem[]; projectId: string | null; workspaceId: string | null; onChange: (next: ChecklistItem[]) => void }) {
@@ -157,6 +191,8 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange }: { item: Ch
       <MenuItem icon={item.done ? Square : SquareCheckBig} label={item.done ? '완료 취소' : '완료'} onClose={close} onPick={() => onChange(toggleCk(root, item.id))} />
       <MenuItem icon={Pencil} label="이름 변경" onClose={close} onPick={async () => { const v = await promptDialog({ title: '서브태스크 이름 변경', defaultValue: item.title, confirmLabel: '변경' }); if (v?.trim()) onChange(renameCk(root, item.id, v.trim())) }} />
       <MenuItem icon={ListPlus} label="하위 서브태스크 추가" onClose={close} onPick={async () => { const v = await promptDialog({ title: '하위 서브태스크', placeholder: '제목', confirmLabel: '추가' }); if (v?.trim()) onChange(addChildCk(root, item.id, v.trim())) }} />
+      <MenuItem icon={IndentIncrease} label="들여쓰기 (Tab)" onClose={close} onPick={() => onChange(indentCk(root, item.id))} />
+      <MenuItem icon={IndentDecrease} label="내어쓰기 (Shift+Tab)" onClose={close} onPick={() => onChange(outdentCk(root, item.id))} />
       <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
       <MenuItem icon={Trash2} label="삭제" danger onClose={close} onPick={() => onChange(deleteCk(root, item.id))} />
     </>

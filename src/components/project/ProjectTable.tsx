@@ -14,7 +14,7 @@ import { fmtDateShort } from '../../lib/dates'
 import { between } from '../../lib/position'
 import { groupTasks, countCk, type GroupBy, type TaskGroup } from '../../lib/group'
 import type { Phase, Project } from '../../types'
-import { DeadlineBadge, Subtasks, InlineSubAdd } from '../TaskRow'
+import { DeadlineBadge, Subtasks, InlineSubAdd, addCkAtDepth } from '../TaskRow'
 
 /** 노션식 테이블 뷰 — 그룹화(상태/라벨/프로젝트/Phase/없음)·접기·인라인 완료/상태·라벨 + 키보드 선택 + 드래그 */
 export default function ProjectTable({
@@ -300,7 +300,7 @@ function Row({ task, gridCls, onOpen, onToggleDone }: {
     )}
     {addingSub && (
       <InlineSubAdd
-        onAdd={title => updateTask(task.id, { checklist: [...task.checklist, { id: nid('ck'), title, done: false, children: [] }] })}
+        onAdd={(title, depth) => updateTask(task.id, { checklist: addCkAtDepth(task.checklist, depth, { id: nid('ck'), title, done: false, children: [] }) })}
         onClose={() => setAddSubFor(null)}
       />
     )}
