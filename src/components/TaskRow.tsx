@@ -289,13 +289,13 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
         className={`group flex min-h-[44px] items-center gap-1 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60 ${
           selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
         } ${isDragging ? 'opacity-40' : ''}`}
+        onPointerDown={e => e.stopPropagation()}
         onClick={e => e.stopPropagation()}
         onContextMenu={onContextMenu}
       >
-        {/* 드래그 핸들 — 핸들에서만 정렬 시작(상위 태스크 드래그로 전파 차단) */}
+        {/* 드래그 핸들 — 여기서만 정렬 시작 */}
         <button
           {...listeners}
-          onPointerDown={e => { e.stopPropagation(); (listeners as Record<string, ((e: React.PointerEvent) => void) | undefined>)?.onPointerDown?.(e) }}
           onClick={e => e.stopPropagation()}
           className="invisible shrink-0 cursor-grab touch-none text-zinc-300 group-hover:visible touch:visible dark:text-zinc-600"
           title="끌어서 순서 변경"
