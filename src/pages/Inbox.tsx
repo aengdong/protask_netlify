@@ -2,14 +2,20 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Plus, CalendarDays, Folder, CloudMoon, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import {
-  DndContext, DragOverlay, PointerSensor, TouchSensor, pointerWithin, closestCenter,
-  useDraggable, useDroppable, useSensor, useSensors,
-  type CollisionDetection, type DragEndEvent,
+  DndContext, DragOverlay, PointerSensor, TouchSensor, closestCorners,
+  useDroppable, useSensor, useSensors,
+  type DragEndEvent,
 } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useStore, selInbox, selSomeday, useNavOrder } from '../store/store'
 import { parseQuick, daysFromToday, fmtDateShort } from '../lib/dates'
+import { between } from '../lib/position'
 import type { Task } from '../types'
 import TaskRow from '../components/TaskRow'
+
+const NONE = '__none' // 미분류(워크스페이스 없음) 그룹 키
+const wsKey = (t: Task) => t.workspace_id ?? NONE
 
 /** 인식된 실행일을 짧은 라벨로 (오늘/내일/모레/M·d) */
 function dateLabel(d: string): string {
@@ -17,12 +23,18 @@ function dateLabel(d: string): string {
   return n === 0 ? '오늘' : n === 1 ? '내일' : n === 2 ? '모레' : fmtDateShort(d)
 }
 
-/** 드래그 가능한 태스크 래퍼 — 거리 임계로 클릭(상세 열기)은 통과, 끌면 이동 */
-function DragTask({ task }: { task: Task }) {
+/** 정렬 가능한 태스크 행 — 거리 임계로 클릭(상세 열기)은 통과, 끌면 재정렬/이동 */
+function SortableRow({ task }: { task: Task }) {
   const openDetail = useStore(s => s.openDetail)
-  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: task.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners} className={isDragging ? 'opacity-40' : ''}>
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+      className={isDragging ? 'opacity-40' : ''}
+    >
       <TaskRow task={task} onOpen={openDetail} />
     </div>
   )
@@ -49,6 +61,7 @@ export default function InboxPage() {
   const workspaces = useStore(s => s.workspaces)
   const addTask = useStore(s => s.addTask)
   const updateTask = useStore(s => s.updateTask)
+  const rebalance = useStore(s => s.rebalance)
   const [text, setText] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
   const [sdOpen, setSdOpen] = useState(() => localStorage.getItem('pd-inbox-someday') !== '0')
@@ -77,28 +90,76 @@ export default function InboxPage() {
     return { noWs, groups }
   }, [inbox, workspaces])
 
+  const inboxIds = useMemo(() => [...noWs, ...groups.flatMap(g => g.tasks)].map(t => t.id), [noWs, groups])
+  const somedayIds = useMemo(() => someday.map(t => t.id), [someday])
+
   // 키보드 내비 순서 (화면 표시 순서 그대로 flat: Inbox → Someday) — Someday는 펼쳤을 때만
   useNavOrder(useMemo(
-    () => [...noWs, ...groups.flatMap(g => g.tasks), ...(sdOpen ? someday : [])].map(t => t.id),
-    [noWs, groups, sdOpen, someday],
+    () => [...inboxIds, ...(sdOpen ? somedayIds : [])],
+    [inboxIds, sdOpen, somedayIds],
   ))
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
   )
-  const collision: CollisionDetection = args => { const p = pointerWithin(args); return p.length ? p : closestCenter(args) }
   const dragTask = dragId ? [...inbox, ...someday].find(t => t.id === dragId) ?? null : null
+
   const onDragEnd = (e: DragEndEvent) => {
     setDragId(null)
-    const overId = e.over?.id
-    if (!overId) return
-    if (overId === 'someday') updateTask(String(e.active.id), { someday: true })
-    else if (overId === 'inbox') updateTask(String(e.active.id), { someday: false })
+    const { active, over } = e
+    if (!over) return
+    const id = String(active.id)
+    const a = [...inbox, ...someday].find(t => t.id === id)
+    if (!a) return
+    const overId = String(over.id)
+
+    // 1) 목적지(Someday 여부 + Inbox 목표 그룹) + 기준 이웃 결정
+    let toSomeday: boolean
+    let targetWs: string // inbox일 때 목표 그룹 키
+    let neighborId: string | null
+    if (overId === 'someday') { toSomeday = true; targetWs = wsKey(a); neighborId = null }
+    else if (overId === 'inbox') { toSomeday = false; targetWs = wsKey(a); neighborId = null }
+    else {
+      const ot = [...inbox, ...someday].find(t => t.id === overId)
+      if (!ot) return
+      if (ot.someday) { toSomeday = true; targetWs = wsKey(a); neighborId = overId }
+      else { toSomeday = false; targetWs = wsKey(ot); neighborId = overId }
+    }
+
+    // 2) 목적지 리스트(현재 표시 순) — active 제외
+    const destAll = toSomeday ? someday : inbox.filter(t => wsKey(t) === targetWs)
+    const list = destAll.filter(t => t.id !== id)
+
+    // 3) 삽입 위치 (같은 리스트 내 이동 방향 보정)
+    let insertAt: number
+    if (!neighborId) insertAt = list.length
+    else {
+      const overIdx = list.findIndex(t => t.id === neighborId)
+      const fromIdx = destAll.findIndex(t => t.id === id)
+      const origOverIdx = destAll.findIndex(t => t.id === neighborId)
+      insertAt = fromIdx !== -1 && fromIdx < origOverIdx ? overIdx + 1 : overIdx
+    }
+    const pos = between(list[insertAt - 1]?.position, list[insertAt]?.position)
+
+    // 4) 적용 — Someday 토글 / (그룹 변경 시) 워크스페이스 재배정 / position
+    const patch: Partial<Task> = { someday: toSomeday }
+    if (!toSomeday && targetWs !== wsKey(a)) {
+      patch.workspace_id = targetWs === NONE ? null : targetWs
+      patch.project_id = null // 이전 워크스페이스의 서브프로젝트는 무효
+    }
+    if (Number.isNaN(pos)) {
+      const order = list.map(t => t.id)
+      order.splice(insertAt, 0, id)
+      updateTask(id, patch)
+      rebalance(order, 'position')
+    } else {
+      updateTask(id, { ...patch, position: pos })
+    }
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={collision} onDragStart={e => setDragId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)}>
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={e => setDragId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)}>
       <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-5 lg:flex-row lg:items-start">
         {/* 왼쪽 — Inbox */}
         <DropColumn id="inbox" active={dragId != null} className="min-w-0 flex-1">
@@ -130,19 +191,21 @@ export default function InboxPage() {
               )}
             </div>
 
-            {noWs.length > 0 && (
-              <section className="mb-4">
-                {groups.length > 0 && <GroupHead label="미분류" count={noWs.length} />}
-                {noWs.map(t => <DragTask key={t.id} task={t} />)}
-              </section>
-            )}
+            <SortableContext items={inboxIds} strategy={verticalListSortingStrategy}>
+              {noWs.length > 0 && (
+                <section className="mb-4">
+                  {groups.length > 0 && <GroupHead label="미분류" count={noWs.length} />}
+                  {noWs.map(t => <SortableRow key={t.id} task={t} />)}
+                </section>
+              )}
 
-            {groups.map(({ ws, tasks }) => (
-              <section key={ws.id} className="mb-4">
-                <GroupHead label={ws.name} count={tasks.length} />
-                {tasks.map(t => <DragTask key={t.id} task={t} />)}
-              </section>
-            ))}
+              {groups.map(({ ws, tasks }) => (
+                <section key={ws.id} className="mb-4">
+                  <GroupHead label={ws.name} count={tasks.length} />
+                  {tasks.map(t => <SortableRow key={t.id} task={t} />)}
+                </section>
+              ))}
+            </SortableContext>
 
             {inbox.length === 0 && (
               <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-[14px] text-zinc-400 dark:border-zinc-700">
@@ -166,7 +229,11 @@ export default function InboxPage() {
               </div>
               <div className="min-h-[120px] rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-1.5 dark:border-zinc-800 dark:bg-zinc-900/30">
                 {someday.length > 0
-                  ? someday.map(t => <DragTask key={t.id} task={t} />)
+                  ? (
+                    <SortableContext items={somedayIds} strategy={verticalListSortingStrategy}>
+                      {someday.map(t => <SortableRow key={t.id} task={t} />)}
+                    </SortableContext>
+                  )
                   : (
                     <div className="flex h-[110px] items-center justify-center px-4 text-center text-[13px] text-zinc-400">
                       {dragId ? '여기에 놓으면 Someday로 보관' : '언젠가 할 일을 여기로 끌어다 두세요'}

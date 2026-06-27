@@ -484,12 +484,12 @@ export function bucketPatch(b: Bucket): Partial<Task> {
 /** Inbox = 미분류(날짜 X · Someday X · 미완료). 프로젝트는 태그일 뿐 — 배정해도 남는다. */
 export const selInbox = (s: Store) =>
   s.tasks.filter(t => !t.scheduled_date && !t.someday && t.status !== 'done')
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
 
 /** Someday = 언젠가 하기로 미뤄둔 것 (칸반 백로그와 동일 집합) */
 export const selSomeday = (s: Store) =>
   s.tasks.filter(t => t.someday && t.status !== 'done')
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
 
 export const selToday = (s: Store) => {
   const today = todayStr()
