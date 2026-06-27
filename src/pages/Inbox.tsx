@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Plus, CalendarDays, Folder, CloudMoon } from 'lucide-react'
+import { Plus, CalendarDays, Folder, CloudMoon, ChevronDown, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, pointerWithin, closestCenter,
@@ -51,6 +51,9 @@ export default function InboxPage() {
   const updateTask = useStore(s => s.updateTask)
   const [text, setText] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
+  const [sdOpen, setSdOpen] = useState(() => localStorage.getItem('pd-inbox-someday') !== '0')
+  const toggleSd = () => setSdOpen(o => { localStorage.setItem('pd-inbox-someday', o ? '0' : '1'); return !o })
+  const sdVisible = sdOpen || dragId != null // 접혀 있어도 드래그 중엔 드롭존 노출
 
   const parsed = parseQuick(text)
   const submit = () => {
@@ -74,10 +77,10 @@ export default function InboxPage() {
     return { noWs, groups }
   }, [inbox, workspaces])
 
-  // 키보드 내비 순서 (화면 표시 순서 그대로 flat: Inbox → Someday)
+  // 키보드 내비 순서 (화면 표시 순서 그대로 flat: Inbox → Someday) — Someday는 펼쳤을 때만
   useNavOrder(useMemo(
-    () => [...noWs, ...groups.flatMap(g => g.tasks), ...someday].map(t => t.id),
-    [noWs, groups, someday],
+    () => [...noWs, ...groups.flatMap(g => g.tasks), ...(sdOpen ? someday : [])].map(t => t.id),
+    [noWs, groups, sdOpen, someday],
   ))
 
   const sensors = useSensors(
@@ -149,23 +152,26 @@ export default function InboxPage() {
           </div>
         </DropColumn>
 
-        {/* 오른쪽 — Someday (끌어다 보관 / 다시 Inbox로) */}
-        <DropColumn id="someday" active={dragId != null} className="lg:w-[420px] lg:shrink-0">
+        {/* 오른쪽 — Someday (끌어다 보관 / 다시 Inbox로). 접기/펼치기 가능, 드래그 중엔 자동 노출 */}
+        <DropColumn id="someday" active={dragId != null} className="lg:w-[500px] lg:shrink-0">
           <div className="min-w-0">
-            <div className="mb-4 flex items-baseline gap-2 px-1">
-              <CloudMoon size={15} className="shrink-0 self-center text-zinc-400" />
+            <button onClick={toggleSd} className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
+              {sdOpen ? <ChevronDown size={15} className="shrink-0 text-zinc-400" /> : <ChevronRight size={15} className="shrink-0 text-zinc-400" />}
+              <CloudMoon size={15} className="shrink-0 text-zinc-400" />
               <h2 className="text-[16px] font-bold tracking-tight text-zinc-600 dark:text-zinc-300">Someday</h2>
               <span className="text-[12.5px] font-semibold text-zinc-400">{someday.length}</span>
-            </div>
-            <div className="min-h-[120px] rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-1.5 dark:border-zinc-800 dark:bg-zinc-900/30">
-              {someday.length > 0
-                ? someday.map(t => <DragTask key={t.id} task={t} />)
-                : (
-                  <div className="flex h-[110px] items-center justify-center px-4 text-center text-[13px] text-zinc-400">
-                    {dragId ? '여기에 놓으면 Someday로 보관' : '언젠가 할 일을 여기로 끌어다 두세요'}
-                  </div>
-                )}
-            </div>
+            </button>
+            {sdVisible && (
+              <div className="min-h-[120px] rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-1.5 dark:border-zinc-800 dark:bg-zinc-900/30">
+                {someday.length > 0
+                  ? someday.map(t => <DragTask key={t.id} task={t} />)
+                  : (
+                    <div className="flex h-[110px] items-center justify-center px-4 text-center text-[13px] text-zinc-400">
+                      {dragId ? '여기에 놓으면 Someday로 보관' : '언젠가 할 일을 여기로 끌어다 두세요'}
+                    </div>
+                  )}
+              </div>
+            )}
           </div>
         </DropColumn>
       </div>
