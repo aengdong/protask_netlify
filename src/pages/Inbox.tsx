@@ -96,7 +96,7 @@ export default function InboxPage() {
 
   return (
     <DndContext sensors={sensors} collisionDetection={collision} onDragStart={e => setDragId(String(e.active.id))} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)}>
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-5 px-5 py-5 lg:flex-row lg:items-start">
+      <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-5 lg:flex-row lg:items-start">
         {/* 왼쪽 — Inbox */}
         <DropColumn id="inbox" active={dragId != null} className="min-w-0 flex-1">
           <div className="min-w-0">
@@ -150,8 +150,8 @@ export default function InboxPage() {
         </DropColumn>
 
         {/* 오른쪽 — Someday (끌어다 보관 / 다시 Inbox로) */}
-        <DropColumn id="someday" active={dragId != null} className="lg:w-[340px] lg:shrink-0">
-          <div>
+        <DropColumn id="someday" active={dragId != null} className="lg:w-[420px] lg:shrink-0">
+          <div className="min-w-0">
             <div className="mb-4 flex items-baseline gap-2 px-1">
               <CloudMoon size={15} className="shrink-0 self-center text-zinc-400" />
               <h2 className="text-[16px] font-bold tracking-tight text-zinc-600 dark:text-zinc-300">Someday</h2>
