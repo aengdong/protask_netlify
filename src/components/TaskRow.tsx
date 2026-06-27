@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star, Pencil, ListPlus, Trash2, IndentIncrease, IndentDecrease, ChevronDown, ChevronRight } from 'lucide-react'
 import { wsColor, type Task, type ChecklistItem } from '../types'
-import { useStore, projectColor, nid } from '../store/store'
+import { useStore, projectColor, nid, ckUpdate } from '../store/store'
 import ProjectChip from './ProjectChip'
 import PlanPopover from './PlanPopover'
 import { useTaskContextMenu, useContextMenu, MenuItem } from './TaskContextMenu'
+import { SubtaskDateChip } from './SubtaskScheduleRow'
 import { promptDialog } from '../store/dialogStore'
 import { daysFromToday, fmtDateShort } from '../lib/dates'
 
@@ -250,6 +251,7 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
         <span className={`min-w-0 flex-1 truncate text-[14.5px] ${item.done ? 'text-zinc-400 line-through dark:text-zinc-500' : ''}`}>
           {item.title}
         </span>
+        <SubtaskDateChip date={item.scheduled_date} selected={selected} onApply={p => onChange(ckUpdate(root, item.id, p))} />
         {!hideProjectTag && (projectId || workspaceId) && (
           <span className="shrink-0"><ProjectChip projectId={projectId} workspaceId={workspaceId} /></span>
         )}
