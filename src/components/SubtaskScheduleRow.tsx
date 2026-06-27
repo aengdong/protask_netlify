@@ -17,7 +17,7 @@ export function SubtaskDateChip({
 }) {
   const [open, setOpen] = useState(false)
   const has = !!date
-  let content = '날짜'
+  let content = 'Plan'
   let tone: 'overdue' | 'today' | 'future' | 'plan' = 'plan'
   if (date) {
     const d = daysFromToday(date)
