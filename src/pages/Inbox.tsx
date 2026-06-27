@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Plus, CalendarDays, Folder, CloudMoon, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, CalendarDays, Folder, CloudMoon, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, pointerWithin, closestCenter,
@@ -152,16 +152,18 @@ export default function InboxPage() {
           </div>
         </DropColumn>
 
-        {/* 오른쪽 — Someday (끌어다 보관 / 다시 Inbox로). 접기/펼치기 가능, 드래그 중엔 자동 노출 */}
-        <DropColumn id="someday" active={dragId != null} className="lg:w-[500px] lg:shrink-0">
-          <div className="min-w-0">
-            <button onClick={toggleSd} className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-              {sdOpen ? <ChevronDown size={15} className="shrink-0 text-zinc-400" /> : <ChevronRight size={15} className="shrink-0 text-zinc-400" />}
-              <CloudMoon size={15} className="shrink-0 text-zinc-400" />
-              <h2 className="text-[16px] font-bold tracking-tight text-zinc-600 dark:text-zinc-300">Someday</h2>
-              <span className="text-[12.5px] font-semibold text-zinc-400">{someday.length}</span>
-            </button>
-            {sdVisible && (
+        {/* 오른쪽 — Someday. 우측 드로어처럼 접고 펼친다(접으면 세로 탭, 드래그 중엔 자동 노출) */}
+        <DropColumn id="someday" active={dragId != null} className={sdVisible ? 'lg:w-[500px] lg:shrink-0' : 'lg:w-[46px] lg:shrink-0'}>
+          {sdVisible ? (
+            <div className="min-w-0">
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <CloudMoon size={15} className="shrink-0 text-zinc-400" />
+                <h2 className="text-[16px] font-bold tracking-tight text-zinc-600 dark:text-zinc-300">Someday</h2>
+                <span className="text-[12.5px] font-semibold text-zinc-400">{someday.length}</span>
+                <button onClick={toggleSd} className="ml-auto rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" title="오른쪽으로 접기">
+                  <ChevronRight size={17} />
+                </button>
+              </div>
               <div className="min-h-[120px] rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-1.5 dark:border-zinc-800 dark:bg-zinc-900/30">
                 {someday.length > 0
                   ? someday.map(t => <DragTask key={t.id} task={t} />)
@@ -171,8 +173,20 @@ export default function InboxPage() {
                     </div>
                   )}
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              onClick={toggleSd}
+              title="Someday 펼치기"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 py-2.5 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/30 dark:hover:bg-zinc-800/60 lg:min-h-[240px] lg:flex-col lg:py-4"
+            >
+              <ChevronDown size={16} className="shrink-0 lg:hidden" />
+              <ChevronLeft size={16} className="hidden shrink-0 lg:block" />
+              <CloudMoon size={15} className="shrink-0" />
+              <span className="text-[13.5px] font-bold tracking-tight lg:[writing-mode:vertical-rl]">Someday</span>
+              <span className="text-[12px] font-semibold text-zinc-400">{someday.length}</span>
+            </button>
+          )}
         </DropColumn>
       </div>
 
