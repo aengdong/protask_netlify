@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star, Pencil, ListPlus, Trash2, IndentIncrease, IndentDecrease, ChevronDown, ChevronRight } from 'lucide-react'
+import { Square, SquareCheckBig, CalendarDays, FolderInput, CircleSlash, Star, Pencil, ListPlus, Trash2, IndentIncrease, IndentDecrease, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import {
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { wsColor, type Task, type ChecklistItem } from '../types'
 import { useStore, projectColor, nid } from '../store/store'
 import ProjectChip from './ProjectChip'
@@ -197,15 +203,57 @@ function outdentCk(items: ChecklistItem[], id: string): ChecklistItem[] {
   return items.map(c => ({ ...c, children: outdentCk(c.children, id) }))
 }
 
+/** id로 항목 찾기(재귀) — DragOverlay 표시용 */
+function findItemCk(items: ChecklistItem[], id: string): ChecklistItem | null {
+  for (const c of items) { if (c.id === id) return c; const f = findItemCk(c.children, id); if (f) return f }
+  return null
+}
+/** 같은 부모(형제) 안에서만 active를 over 위치로 재정렬. 형제가 아니면 null(이동 무시). */
+function reorderSiblingsCk(items: ChecklistItem[], activeId: string, overId: string): ChecklistItem[] | null {
+  const ai = items.findIndex(c => c.id === activeId)
+  const oi = items.findIndex(c => c.id === overId)
+  if (ai !== -1 && oi !== -1) return arrayMove(items, ai, oi)
+  for (let i = 0; i < items.length; i++) {
+    const r = reorderSiblingsCk(items[i].children, activeId, overId)
+    if (r) { const next = [...items]; next[i] = { ...items[i], children: r }; return next }
+  }
+  return null
+}
+
 export function Subtasks({ items, projectId, workspaceId, onChange, hideProjectTag }: { items: ChecklistItem[]; projectId: string | null; workspaceId: string | null; onChange: (next: ChecklistItem[]) => void; hideProjectTag?: boolean }) {
   // 태스크 행과 동일한 디자인 + 단계마다 세로 가이드 선/들여쓰기. 각 행은 우클릭 메뉴 + 부모 프로젝트 태그.
-  // 자식 렌더링·접기는 SubtaskRow가 직접 담당(노드별 접힘 상태).
+  // 자체 DndContext로 같은 부모 안에서 드래그 정렬(핸들로만 시작 → 상위 태스크 드래그와 분리).
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveId(null)
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const next = reorderSiblingsCk(items, String(active.id), String(over.id))
+    if (next) onChange(next)
+  }
+  const activeItem = activeId ? findItemCk(items, activeId) : null
   return (
-    <div className="mb-1 ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
-      {items.map(c => (
-        <SubtaskRow key={c.id} item={c} root={items} projectId={projectId} workspaceId={workspaceId} onChange={onChange} hideProjectTag={hideProjectTag} />
-      ))}
-    </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={e => setActiveId(String(e.active.id))}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <div className="mb-1 ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
+        <SortableContext items={items.map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {items.map(c => (
+            <SubtaskRow key={c.id} item={c} root={items} projectId={projectId} workspaceId={workspaceId} onChange={onChange} hideProjectTag={hideProjectTag} />
+          ))}
+        </SortableContext>
+      </div>
+      <DragOverlay>
+        {activeItem ? (
+          <div className="rounded-md border border-blue-300 bg-white px-2 py-1 text-[14px] shadow-lg dark:border-blue-700 dark:bg-zinc-800">{activeItem.title}</div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   )
 }
 
@@ -229,17 +277,31 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
   const setAddSubFor = useStore(s => s.setAddSubFor)
   const hasChildren = item.children.length > 0
   const [collapsed, toggleCollapsed] = useCollapsed(item.id)
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const setRefs = (el: HTMLDivElement | null) => { setNodeRef(el); rowRef.current = el }
   return (
     <>
       <div
-        ref={rowRef}
+        ref={setRefs}
         data-navid={item.id}
-        className={`group flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60 ${
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        {...attributes}
+        className={`group flex min-h-[44px] items-center gap-1 rounded-md px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] dark:hover:bg-zinc-800/60 ${
           selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''
-        }`}
+        } ${isDragging ? 'opacity-40' : ''}`}
         onClick={e => e.stopPropagation()}
         onContextMenu={onContextMenu}
       >
+        {/* 드래그 핸들 — 핸들에서만 정렬 시작(상위 태스크 드래그로 전파 차단) */}
+        <button
+          {...listeners}
+          onPointerDown={e => { e.stopPropagation(); (listeners as Record<string, ((e: React.PointerEvent) => void) | undefined>)?.onPointerDown?.(e) }}
+          onClick={e => e.stopPropagation()}
+          className="invisible shrink-0 cursor-grab touch-none text-zinc-300 group-hover:visible touch:visible dark:text-zinc-600"
+          title="끌어서 순서 변경"
+        >
+          <GripVertical size={13} />
+        </button>
         <button
           className={`shrink-0 ${item.done ? 'text-emerald-500' : 'text-zinc-300 hover:text-emerald-500 dark:text-zinc-600'}`}
           onClick={() => onChange(toggleCk(root, item.id))}
@@ -257,9 +319,11 @@ function SubtaskRow({ item, root, projectId, workspaceId, onChange, hideProjectT
       </div>
       {hasChildren && !collapsed && (
         <div className="ml-3 border-l-2 border-zinc-200 pl-2 dark:border-zinc-700">
-          {item.children.map(ch => (
-            <SubtaskRow key={ch.id} item={ch} root={root} projectId={projectId} workspaceId={workspaceId} onChange={onChange} hideProjectTag={hideProjectTag} />
-          ))}
+          <SortableContext items={item.children.map(c => c.id)} strategy={verticalListSortingStrategy}>
+            {item.children.map(ch => (
+              <SubtaskRow key={ch.id} item={ch} root={root} projectId={projectId} workspaceId={workspaceId} onChange={onChange} hideProjectTag={hideProjectTag} />
+            ))}
+          </SortableContext>
         </div>
       )}
       {addingChild && (
