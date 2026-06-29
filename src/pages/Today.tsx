@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CalendarX2, RefreshCw, CalendarDays, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Folder } from 'lucide-react'
+import { CalendarX2, RefreshCw, CalendarDays, Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, selToday, selOverdue, useNavOrder } from '../store/store'
 import { promptDialog, confirmDialog } from '../store/dialogStore'
@@ -36,6 +36,8 @@ export default function TodayPage() {
   const [text, setText] = useState('')
   const [groupBy, setGroupBy] = useState<'section' | 'project'>(() => (localStorage.getItem('pd-todaygroup') === 'project' ? 'project' : 'section'))
   const setGroupByP = (g: 'section' | 'project') => { setGroupBy(g); localStorage.setItem('pd-todaygroup', g) }
+  const [doneOpen, setDoneOpen] = useState(() => localStorage.getItem('pd-today-done') !== '0')
+  const toggleDoneOpen = () => setDoneOpen(o => { localStorage.setItem('pd-today-done', o ? '0' : '1'); return !o })
   const addSectionPrompt = async () => {
     const name = await promptDialog({ title: '새 섹션', placeholder: '예: 아침, 오전, 집중시간', confirmLabel: '추가' })
     if (name?.trim()) addSection(name.trim())
@@ -246,8 +248,12 @@ export default function TodayPage() {
         )}
         {doneToday.length > 0 && (
           <section className="mt-5">
-            <GroupLabel label="Done" count={doneCount} />
-            {doneToday.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
+            <button onClick={toggleDoneOpen} className="mt-1 mb-1.5 flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
+              {doneOpen ? <ChevronDown size={14} className="text-zinc-400" /> : <ChevronRight size={14} className="text-zinc-400" />}
+              <span className="text-[14px] font-bold tracking-tight">Done</span>
+              <span className="text-[12.5px] font-semibold text-zinc-400">{doneCount}</span>
+            </button>
+            {doneOpen && doneToday.map(t => <TaskRow key={t.id} task={t} onOpen={openDetail} />)}
           </section>
         )}
         <DragOverlay>
