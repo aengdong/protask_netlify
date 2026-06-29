@@ -65,8 +65,8 @@ export default function TaskRow({
     <div>
       <div
         ref={ref}
-        className={`group flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 rounded-md border-l-[3px] px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] md:flex-nowrap dark:hover:bg-zinc-800/60 ${
-          task.important && !done ? 'border-amber-400 bg-amber-50/50 dark:border-amber-500 dark:bg-amber-500/10' : 'border-transparent'
+        className={`group flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 hover:bg-zinc-100/80 md:min-h-[36px] md:flex-nowrap dark:hover:bg-zinc-800/60 ${
+          task.important && !done ? 'border-amber-400 dark:border-amber-500' : 'border-transparent'
         } ${selected ? 'bg-zinc-100/80 ring-2 ring-blue-500/50 ring-inset dark:bg-zinc-800/60' : ''}`}
         onClick={() => onOpen(task.id)}
         onContextMenu={onContextMenu}
