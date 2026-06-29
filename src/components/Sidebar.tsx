@@ -73,9 +73,20 @@ function ProjectNavRow({ ws, workspaces, folders }: { ws: Workspace; workspaces:
 function FolderGroup({ folder, members, workspaces, folders }: { folder: FolderT; members: Workspace[]; workspaces: Workspace[]; folders: FolderT[] }) {
   const updateFolder = useStore(s => s.updateFolder)
   const deleteFolder = useStore(s => s.deleteFolder)
+  const addWorkspace = useStore(s => s.addWorkspace)
+  const updateWorkspace = useStore(s => s.updateWorkspace)
+  const navigate = useNavigate()
   const { setNodeRef, isOver } = useDroppable({ id: `folder:${folder.id}` })
   const [open, setOpen] = useState(() => localStorage.getItem(`pd-folder-${folder.id}`) !== '0')
   const toggle = () => setOpen(o => { localStorage.setItem(`pd-folder-${folder.id}`, o ? '0' : '1'); return !o })
+  const addProjectHere = async () => {
+    const name = await promptDialog({ title: '새 프로젝트', placeholder: '프로젝트 이름', confirmLabel: '만들기' })
+    if (!name?.trim()) return
+    const id = addWorkspace(name.trim())
+    updateWorkspace(id, { folder_id: folder.id })
+    if (!open) { setOpen(true); localStorage.setItem(`pd-folder-${folder.id}`, '1') }
+    navigate(`/w/${id}`)
+  }
   const { onContextMenu, menu } = useContextMenu(close => (
     <>
       <MenuItem icon={Pencil} label="폴더 이름 변경" onClose={close} onPick={async () => {
@@ -90,12 +101,16 @@ function FolderGroup({ folder, members, workspaces, folders }: { folder: FolderT
   ))
   return (
     <div ref={setNodeRef} className={`rounded-md ${isOver ? 'bg-blue-50/60 ring-2 ring-blue-400/60 dark:bg-blue-950/30' : ''}`}>
-      <button onClick={toggle} onContextMenu={onContextMenu} className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-[13.5px] font-semibold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60">
-        {open ? <ChevronDown size={13} className="shrink-0 text-zinc-400" /> : <ChevronRight size={13} className="shrink-0 text-zinc-400" />}
-        <Folder size={13.5} className="shrink-0 text-zinc-400" />
-        <span className="truncate">{folder.name}</span>
-        <span className="ml-auto text-[12px] font-semibold text-zinc-400">{members.length || ''}</span>
-      </button>
+      <div className="group flex w-full items-center rounded-md pr-1 text-[13.5px] font-semibold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60">
+        <button onClick={toggle} onContextMenu={onContextMenu} className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1.5 text-left">
+          {open ? <ChevronDown size={13} className="shrink-0 text-zinc-400" /> : <ChevronRight size={13} className="shrink-0 text-zinc-400" />}
+          <Folder size={13.5} className="shrink-0 text-zinc-400" />
+          <span className="truncate">{folder.name}</span>
+        </button>
+        <button onClick={addProjectHere} title="이 폴더에 프로젝트 추가" className="shrink-0 rounded p-0.5 text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200">
+          <Plus size={13} />
+        </button>
+      </div>
       {open && (
         <div className="ml-3 border-l border-zinc-200 pl-1.5 dark:border-zinc-800">
           {members.map(w => <ProjectNavRow key={w.id} ws={w} workspaces={workspaces} folders={folders} />)}
