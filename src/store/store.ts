@@ -74,7 +74,8 @@ interface Store {
   /* workspaces */
   addWorkspace: (name: string) => string
   updateWorkspace: (id: string, patch: Partial<Workspace>) => void
-  deleteWorkspace: (id: string) => void
+  /** 프로젝트(워크스페이스) 삭제. keepTasks=true면 안의 태스크는 미분류(Inbox)로 보존 */
+  deleteWorkspace: (id: string, keepTasks?: boolean) => void
 
   /* folders (프로젝트 그룹) */
   addFolder: (name: string) => string
@@ -237,13 +238,19 @@ export const useStore = create<Store>((set, get) => ({
     set(s => ({ workspaces: s.workspaces.map(w => (w.id === id ? { ...w, ...patch } : w)) }))
     enqueue({ table: 'workspaces', kind: 'update', rowId: id, payload: patch })
   },
-  deleteWorkspace: id => {
+  deleteWorkspace: (id, keepTasks) => {
+    // 태스크 보존 시: 워크스페이스 삭제(DB CASCADE)에 앞서 태스크를 미분류로 떼어낸다.
+    const orphan = keepTasks ? get().tasks.filter(t => t.workspace_id === id) : []
     set(s => ({
       workspaces: s.workspaces.filter(w => w.id !== id),
       phases: s.phases.filter(p => p.workspace_id !== id),
       projects: s.projects.filter(p => p.workspace_id !== id),
-      tasks: s.tasks.filter(t => t.workspace_id !== id),
+      tasks: keepTasks
+        ? s.tasks.map(t => (t.workspace_id === id ? { ...t, workspace_id: null, project_id: null } : t))
+        : s.tasks.filter(t => t.workspace_id !== id),
     }))
+    // 순서 중요: 태스크 분리(update)를 워크스페이스 delete보다 먼저 큐에 넣어야 CASCADE에 안 쓸린다.
+    for (const t of orphan) enqueue({ table: 'tasks', kind: 'update', rowId: t.id, payload: { workspace_id: null, project_id: null } })
     enqueue({ table: 'workspaces', kind: 'delete', rowId: id })
   },
 

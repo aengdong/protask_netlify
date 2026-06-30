@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useStore, selInbox, selToday, selOverdue, selDated, selWeek } from '../store/store'
 import { wsColor, type Workspace, type Folder as FolderT } from '../types'
 import { onSyncStatus, retryNow, type SyncStatus } from '../lib/sync'
-import { promptDialog, confirmDialog } from '../store/dialogStore'
+import { promptDialog, confirmDialog, choiceDialog } from '../store/dialogStore'
 import { useContextMenu, MenuItem } from './TaskContextMenu'
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, pointerWithin, closestCenter,
@@ -40,11 +40,18 @@ function ProjectNavRow({ ws, workspaces, folders }: { ws: Workspace; workspaces:
         if (n?.trim()) updateWorkspace(ws.id, { folder_id: addFolder(n.trim()) })
       }} />
       <Divider />
-      <MenuItem icon={Trash2} label="삭제" danger onClose={close} onPick={async () => {
-        if (await confirmDialog({ title: '프로젝트 삭제', message: `"${ws.name}"와 모든 서브프로젝트·태스크를 삭제할까요?`, confirmLabel: '삭제', danger: true })) {
-          deleteWorkspace(ws.id)
-          if (location.pathname === `/w/${ws.id}`) navigate('/')
-        }
+      <MenuItem icon={Trash2} label="삭제…" danger onClose={close} onPick={async () => {
+        const choice = await choiceDialog({
+          title: '프로젝트 삭제',
+          message: `"${ws.name}" 프로젝트를 삭제합니다. 안의 태스크를 어떻게 할까요?`,
+          options: [
+            { label: '태스크도 함께 삭제', value: 'all', danger: true },
+            { label: '태스크는 Inbox로 보관', value: 'keep' },
+          ],
+        })
+        if (!choice) return
+        deleteWorkspace(ws.id, choice === 'keep')
+        if (location.pathname === `/w/${ws.id}`) navigate('/')
       }} />
     </>
   ))

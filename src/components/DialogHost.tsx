@@ -11,12 +11,13 @@ export default function DialogHost() {
 
   const cancel = () => {
     if (current.kind === 'prompt') current.resolve(null)
+    else if (current.kind === 'choice') current.resolve(null)
     else current.resolve(false)
     close()
   }
   const ok = () => {
     if (current.kind === 'prompt') current.resolve(inputRef.current?.value ?? '')
-    else current.resolve(true)
+    else if (current.kind === 'confirm') current.resolve(true)
     close()
   }
 
@@ -45,18 +46,35 @@ export default function DialogHost() {
             onFocusCapture={e => e.currentTarget.select()}
           />
         )}
-        <div className="mt-4 flex justify-end gap-2">
-          <button className="btn !px-3" onClick={cancel}>취소</button>
-          <button
-            autoFocus={current.kind === 'confirm'}
-            className={current.kind === 'confirm' && current.danger
-              ? 'btn !border-red-600 !bg-red-600 !px-3 !text-white hover:!bg-red-700 dark:!bg-red-600 dark:hover:!bg-red-500'
-              : 'btn btn-primary !px-3'}
-            onClick={ok}
-          >
-            {current.confirmLabel}
-          </button>
-        </div>
+        {current.kind === 'choice' ? (
+          <div className="mt-4 flex flex-col gap-2">
+            {current.options.map(o => (
+              <button
+                key={o.value}
+                className={o.danger
+                  ? 'btn !border-red-600 !bg-red-600 !px-3 !text-white hover:!bg-red-700 dark:!bg-red-600 dark:hover:!bg-red-500'
+                  : 'btn btn-primary !px-3'}
+                onClick={() => { current.resolve(o.value); close() }}
+              >
+                {o.label}
+              </button>
+            ))}
+            <button className="btn !px-3" onClick={cancel}>취소</button>
+          </div>
+        ) : (
+          <div className="mt-4 flex justify-end gap-2">
+            <button className="btn !px-3" onClick={cancel}>취소</button>
+            <button
+              autoFocus={current.kind === 'confirm'}
+              className={current.kind === 'confirm' && current.danger
+                ? 'btn !border-red-600 !bg-red-600 !px-3 !text-white hover:!bg-red-700 dark:!bg-red-600 dark:hover:!bg-red-500'
+                : 'btn btn-primary !px-3'}
+              onClick={ok}
+            >
+              {current.confirmLabel}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
